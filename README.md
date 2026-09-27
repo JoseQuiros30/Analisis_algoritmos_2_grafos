@@ -8,7 +8,7 @@ Los tiempos y penalizaciones serán datos simulados para fines académicos. La a
 
 Primera entrega de Jose: base de Laravel, SQLite, zona horaria `America/Bogota`, idioma español y bienvenida en `/` (ruta `home`). La comprobación de salud de Laravel está en `/up`.
 
-Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El servicio de pesos dinámicos ya calcula costos por conexión. La interfaz permite preparar y validar un recorrido en `/planificador`; Dijkstra todavía no está integrado.
+Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El servicio de pesos dinámicos ya calcula costos por conexión y `/escenarios` compara los cuatro escenarios predefinidos. La interfaz permite preparar y validar un recorrido en `/planificador`; Dijkstra todavía no está integrado.
 
 ## Instalación local
 
@@ -133,7 +133,7 @@ Ejemplos para una conexión con tiempo base 4, lluvia 1, hora pico 2 y congesti�
 
 El servicio rechaza climas desconocidos y costos inválidos con `InvalidArgumentException`, incluso si una penalización inválida está inactiva. Revisa los valores sin convertirlos primero a los casts de Eloquent para no ocultar fracciones o datos corruptos. Exige tiempo base positivo y penalizaciones no negativas; también rechaza desbordamiento del total. Una capa HTTP futura deberá validar los controles y convertirlos a los tipos de este contrato.
 
-No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionará conexiones bloqueadas en la construcción del grafo o en Dijkstra. Los escenarios de la tabla están cubiertos por pruebas del servicio; su comparación visual se implementará en una entrega posterior.
+No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionará conexiones bloqueadas en la construcción del grafo o en Dijkstra. Los escenarios de la tabla están cubiertos por pruebas del servicio. La comparación visual por conexión está disponible en `/escenarios`; comparar rutas completas sigue pendiente de Dijkstra.
 
 ```sh
 php artisan test --compact tests/Feature/RouteCostServiceTest.php
@@ -159,16 +159,46 @@ Verificación manual:
 php artisan test --compact tests/Feature/RoutePlannerTest.php
 ```
 
+## Comparación de escenarios por conexión
+
+Entra al planificador y pulsa **Comparar escenarios**. La página `GET /escenarios` (`scenarios.index`) permite escoger una conexión dirigida, incluida su línea, y destacar uno de cuatro escenarios. Pulsa **Comparar escenarios** para aplicar la selección. La tabla siempre compara los cuatro sobre esa misma conexión, y la tarjeta destaca el escenario elegido. Los resultados corresponden al último envío, no a cambios sin confirmar en los controles.
+
+`ScenarioComparisonService` centraliza los escenarios y utiliza `RouteCostService` sin duplicar su fórmula. El método `compare(Connection $connection)` devuelve un array indexado por `normal`, `rain`, `peak_hour` y `rain_peak_hour`. Cada entrada incluye `label`, `weather`, `is_peak_hour`, `costs` (el desglose del servicio de costos) y `difference` (minutos adicionales respecto a Normal).
+
+- **Normal:** sin lluvia ni hora pico.
+- **Lluvia:** activa solamente lluvia.
+- **Hora pico:** activa solamente la penalización de hora pico.
+- **Lluvia + hora pico:** activa ambas penalizaciones.
+
+Congestión y transbordo se mantienen desactivados para aislar estas dos variables. Hora pico es un interruptor del escenario académico: esta pantalla no interpreta horarios ni sustituye la detección de Anderson. Los escenarios no modifican la base de datos ni las condiciones seleccionadas en el planificador.
+
+La selección predeterminada es la primera conexión ordenada por línea e ID y el escenario Normal. Sin conexiones aparece un estado vacío. `CompareScenariosRequest` rechaza IDs inexistentes y escenarios desconocidos; redirige a la página limpia para evitar ciclos con parámetros inválidos. Cada sentido se compara con sus propios costos. Las etiquetas de estaciones se escapan en Blade.
+
+```php
+// $connection es una instancia de Connection previamente cargada.
+$comparison = app(\App\Services\ScenarioComparisonService::class)->compare($connection);
+$rainMinutes = $comparison['rain']['costs']['total'];
+$extraMinutes = $comparison['rain']['difference'];
+```
+
+En código de aplicación, inyecta el servicio en el constructor o en el controlador. Este ejemplo también puede utilizarse en Tinker con una conexión cargada. El servicio está listo para reutilizar sus escenarios cuando se integre Dijkstra, pero esta comparación no calcula ni elige una ruta completa.
+
+Prueba manual: elige un tramo de la línea A del catálogo sin modificar, selecciona Lluvia + hora pico y envía. Deben aparecer totales 4, 5, 6 y 7 minutos, diferencias 0, 1, 2 y 3, y una tarjeta de 7 minutos. En un tramo de la línea B los totales son 3, 4, 5 y 6. Comprueba también el sentido inverso y el formulario sin JavaScript.
+
+```sh
+php artisan test --compact tests/Feature/ScenarioComparisonTest.php tests/Feature/ScenarioPageTest.php
+npm run build
+```
+
 ## Entregas pendientes de Jose
 
-Después de esta interfaz quedan **4 entregas estimadas**, con pruebas y documentación en cada una:
+Con la comparación **por conexión** terminada quedan **3 entregas estimadas**:
 
-1. **Escenarios:** controles rápidos Normal, Lluvia, Hora pico y Lluvia + Hora pico, y comparación de costos. La comparación de rutas completas dependerá de Dijkstra.
-2. **Resultados:** tiempo total, estaciones, transbordos, desglose y timeline del recorrido, integrados con la salida del algoritmo de Anderson.
-3. **Integración y pruebas finales:** conectar detección de hora pico/congestión, escenarios e interfaz con Dijkstra; acordar conexiones alternativas simuladas y la representación de transbordos para demostrar cambios de ruta.
-4. **Documentación académica final:** problema, arquitectura, modelo de datos, fórmula de pesos, clima y hora pico, ejemplos y guía de demostración. El README ya documenta parte de estos puntos.
+1. **Resultados e integración de escenarios por ruta:** tiempo total, estaciones, transbordos, desglose, timeline y comparación de rutas completas. Requiere la salida real de Dijkstra de Anderson.
+2. **Integración y pruebas finales:** conectar detección de hora pico/congestión; acordar conexiones alternativas simuladas y representación de transbordos para demostrar cambios de ruta. Depende de ambos integrantes.
+3. **Documentación académica final:** consolidar problema, arquitectura, datos, fórmula de pesos, clima y hora pico, ejemplos y guía de demostración con los comportamientos finales. El README ya cubre la implementación actual de Jose.
 
-Esta división estima entregas, no commits ni una garantía de duración. Jose puede avanzar los escenarios mientras Anderson prepara el algoritmo. El cálculo real, sus resultados y la verificación conjunta requieren esa integración.
+La comparación de escenarios por ruta sigue pendiente dentro de la primera entrega; la pantalla por conexión no la reemplaza. Esta división estima entregas, no commits ni duración. Jose puede revisar su documentación mientras Anderson prepara el algoritmo; el cierre funcional requiere esa integración.
 
 ## Trabajo colaborativo
 
@@ -190,7 +220,7 @@ Cada integrante trabaja en su propia rama, con commits pequeños por funcionalid
 
 Dijkstra consumirá el servicio de costos de Jose. La detección de hora pico y congestión pertenece a Anderson; Jose integrará sus penalizaciones sin duplicar esa lógica.
 
-Siguiente funcionalidad de Jose: escenarios predefinidos y comparación de costos, en `dev/jose`.
+Siguiente funcionalidad de Jose: resultados y comparación de rutas completas cuando esté disponible Dijkstra, en `dev/jose`.
 
 ## Herramientas de desarrollo
 
