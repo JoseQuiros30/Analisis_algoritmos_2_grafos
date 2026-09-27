@@ -30,7 +30,8 @@
             <p class="eyebrow">Análisis de algoritmos · Medellín</p>
             <h1 id="welcome-title">Cada estación, una conexión por explorar.</h1>
             <p>Estudiamos cómo los grafos y el algoritmo de Dijkstra pueden ayudar a encontrar una ruta entre estaciones del Metro de Medellín.</p>
-            <p><strong>Proyecto en desarrollo.</strong> El calculador de rutas estará disponible en una próxima entrega.</p>
+            <p><strong>Proyecto en desarrollo.</strong> Ya puedes preparar tu recorrido; el cálculo de rutas está pendiente de integración.</p>
+            <p><a href="{{ route('routes.index') }}">Abrir el planificador →</a></p>
         </section>
         <section class="cards" aria-label="Conceptos del proyecto">
             <article><h2>Estaciones y conexiones</h2><p>Las estaciones serán los vértices del grafo y sus conexiones, las aristas.</p></article>
