@@ -164,7 +164,7 @@ El resultado seleccionado muestra tiempo total, número de estaciones incluidos 
 - La hora de salida es una referencia: aún no hay detección automática de hora pico. **Simular hora pico** determina si se aplica esa penalización; no se inventan horarios en el código de Jose.
 - Congestión y costo contextual de transbordo están desactivados. Se muestran como pendientes y cero minutos, incluso si existen parámetros configurados en una conexión. El conteo de cambios de línea es informativo y no participa como criterio de desempate.
 - La minimización de conexiones paralelas es correcta para los pesos actuales, independientes de la línea anterior. Cuando se cobre por cambiar de línea, será necesario representar estados estación/línea o conexiones explícitas de transbordo; no basta con añadir la penalización después de Dijkstra.
-- El grafo visual, panel académico e incidentes siguen pendientes de Anderson. El servicio de Dijkstra conserva su soporte de historial; esta pantalla no lo solicita para evitar guardar capturas innecesarias en sesión.
+- El mapa esquemático ya está integrado por solicitud de Jose. El panel académico e incidentes siguen pendientes de Anderson. El servicio de Dijkstra conserva su soporte de historial; esta pantalla no lo solicita para evitar guardar capturas innecesarias en sesión.
 - El catálogo actual tiene un único camino simple por par. Las pruebas usan una red pequeña de ejemplo con alternativas y demuestran que la lluvia cambia la ruta; aún falta acordar alternativas simuladas para la demostración en pantalla.
 
 ### Prueba manual
@@ -178,6 +178,31 @@ El resultado seleccionado muestra tiempo total, número de estaciones incluidos 
 ```sh
 php artisan test --compact tests/Feature/RoutePlannerIntegrationTest.php tests/Feature/RoutePlannerTest.php
 ```
+
+## Mapa esquemático interactivo
+
+El planificador muestra un mapa inspirado en la disposición de la referencia aportada por Jose: línea A vertical, azul, y línea B hacia San Javier, naranja. Representa únicamente las 21 estaciones del catálogo académico y las conexiones guardadas; no es un mapa oficial, completo ni geográfico. Los tramos simplificados pueden agrupar estaciones omitidas. Las estaciones adicionales se ubican en una zona auxiliar hasta asignarles una posición esquemática.
+
+Cytoscape.js se usa **solo para dibujar y animar**, nunca para resolver caminos. `RoutePlannerService` y el Dijkstra de Anderson siguen calculando los recorridos. `RouteController` entrega al mapa un JSON escapado con IDs, códigos y nombres de estaciones, conexiones dirigidas y los mismos resultados que recibe el resumen.
+
+- Las conexiones inversas de la misma línea se agrupan visualmente; los IDs y costos de cada sentido se conservan. Líneas distintas entre las mismas estaciones siguen siendo aristas separadas.
+- Al calcular, el mapa resalta los IDs de las conexiones elegidas, marca origen/destino y muestra flechas de sentido, minutos por tramo y acumulados por estación. Las demás conexiones siguen visibles con menor intensidad.
+- **Reproducir / Pausar**, **Reiniciar** y la barra de avance permiten recorrer la ruta. Cada paso de la animación dura aproximadamente 1,1 segundos, independientemente de los minutos simulados. El contador siempre usa los costos reales del resultado.
+- Al tocar una conexión seleccionada se muestra su desglose; las demás muestran sus tiempos base por sentido. Al tocar una estación del recorrido se muestra su tiempo acumulado.
+- **+**, **−** y **Ajustar** controlan el zoom. El mapa se puede arrastrar y ampliar con gestos táctiles. En móvil, el encuadre completo reduce el tamaño de las etiquetas; amplía para leer los detalles.
+- Al cambiar condiciones o intercambiar estaciones, se detiene la reproducción y se retiran los tiempos y el resaltado anterior hasta recalcular. Una ruta inexistente conserva la red sin inventar un recorrido.
+- Si el sistema solicita movimiento reducido, el botón avanza una estación por pulsación, sin reproducción automática. La lista de estaciones y el timeline de resultados ofrecen alternativas textuales al lienzo. Sin JavaScript siguen funcionando el formulario y los resultados de texto.
+
+Archivos de visualización: `resources/js/metro-graph.js`, `resources/js/metro-map-data.js` y `resources/views/partials/metro-map.blade.php`. No se modificaron el algoritmo de Anderson ni los costos para este cambio de interfaz.
+
+```sh
+npm ci
+npm run build
+npm run test:map
+php artisan test --compact tests/Feature/MetroMapTest.php
+```
+
+Prueba visual: calcula Niquía → San Javier con lluvia y hora pico, reproduce y pausa, mueve la barra al final (85 minutos con el catálogo original), cambia el clima y verifica que desaparezca la ruta anterior. Revisa también el sentido inverso, el estado sin ruta y el zoom en móvil.
 
 ## Comparación de escenarios por conexión
 
@@ -214,10 +239,10 @@ npm run build
 
 Con resultados y comparación de rutas completas implementados quedan **2 bloques de cierre**:
 
-1. **Integración y pruebas finales:** incorporar la detección de hora pico/congestión de Anderson y acordar transbordos y conexiones alternativas simuladas. Verificar la integración con su grafo visual y modo académico cuando estén disponibles.
+1. **Integración y pruebas finales:** incorporar la detección de hora pico/congestión de Anderson y acordar transbordos y conexiones alternativas simuladas. Coordinar el mapa ya implementado con Anderson y verificar su modo académico cuando esté disponible.
 2. **Documentación académica final y demostración:** consolidar la arquitectura definitiva, limitaciones resueltas, ejemplos y guía de exposición. El README describe la implementación actual y los pendientes explícitos.
 
-Dijkstra y su registro de ejecución ya están integrados. Hora pico automática, congestión, visualización, panel académico e incidentes todavía no aparecen en el código recibido de Anderson.
+Dijkstra y su registro de ejecución ya están integrados. Hora pico automática, congestión, panel académico e incidentes aún no están integrados en esta rama. Hay avances de tráfico publicados en las ramas de Anderson; se integrarán por separado. La visualización ahora está disponible en el planificador.
 
 ## Trabajo colaborativo
 
