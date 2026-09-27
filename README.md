@@ -8,11 +8,11 @@ Los tiempos y penalizaciones serán datos simulados para fines académicos. La a
 
 Primera entrega de Jose: base de Laravel, SQLite, zona horaria `America/Bogota`, idioma español y bienvenida en `/` (ruta `home`). La comprobación de salud de Laravel está en `/up`.
 
-Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El servicio de pesos dinámicos ya calcula costos por conexión. La interfaz del calculador y Dijkstra todavía no están implementados.
+Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El servicio de pesos dinámicos ya calcula costos por conexión. La interfaz permite preparar y validar un recorrido en `/planificador`; Dijkstra todavía no está integrado.
 
 ## Instalación local
 
-Requisitos: PHP 8.3 o superior, Composer y extensión `pdo_sqlite`. Node.js y npm son necesarios cuando se utilicen los recursos de Vite; la bienvenida actual no requiere compilación.
+Requisitos: PHP 8.3 o superior, Composer y extensión `pdo_sqlite`. El planificador requiere Node.js compatible con Vite 8 (20.19+ o 22.12+) y npm para compilar sus estilos y JavaScript. La bienvenida permanece accesible sin Vite.
 
 Desde la raíz de una copia nueva del repositorio:
 
@@ -23,6 +23,8 @@ php artisan key:generate
 php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
 php artisan migrate
 php artisan db:seed
+npm ci
+npm run build
 php artisan serve
 ```
 
@@ -40,7 +42,7 @@ php artisan route:list --except-vendor
 php artisan test --compact
 ```
 
-La página inicial debe mostrar MetroRoute Medellín y el aviso de proyecto en desarrollo. Aún no permite calcular rutas.
+La página inicial muestra MetroRoute Medellín y el enlace «Abrir el planificador». El planificador valida la selección pero todavía no calcula rutas.
 
 ## Estaciones
 
@@ -137,6 +139,37 @@ No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionar�
 php artisan test --compact tests/Feature/RouteCostServiceTest.php
 ```
 
+## Interfaz del planificador
+
+Desde la bienvenida, abre **Abrir el planificador** (`GET /planificador`, ruta `routes.index`). Los selectores consultan las estaciones reales de SQLite. El formulario incluye origen, destino, hora en Bogotá y clima Normal/Lluvia. El botón de intercambio requiere JavaScript; enviar y validar el formulario funciona también sin él.
+
+`POST /planificador` (`routes.prepare`) valida los datos mediante `PlanRouteRequest`: estaciones existentes y distintas, hora HH:MM y clima permitido. Conserva las selecciones tras un error y devuelve mensajes en español. Una selección correcta aparece en el resumen, sin guardar un viaje ni calcular tiempos. El resumen es temporal y se muestra tras el envío; JavaScript lo oculta si cambias las condiciones para evitar mostrar datos desactualizados.
+
+«Calcular ruta» permanece deshabilitado hasta integrar Dijkstra. El área central muestra el catálogo alfabético y reserva el espacio para el grafo de Anderson; no simula una ruta ni dibuja conexiones inventadas. Con menos de dos estaciones se deshabilita la preparación.
+
+Verificación manual:
+
+1. Ejecuta `npm run build` y `php artisan serve`; entra por el enlace de la bienvenida.
+2. Selecciona Niquía y San Javier, hora 07:30 y Lluvia. Pulsa «Preparar recorrido» y revisa el resumen.
+3. Cambia un control: el resumen anterior debe ocultarse. Intercambia las estaciones y vuelve a enviar.
+4. Selecciona el mismo origen y destino: debe aparecer un error en español conservando los demás controles.
+5. Revisa el formulario con teclado y en una ventana estrecha. Sin JavaScript, el envío sigue funcionando.
+
+```sh
+php artisan test --compact tests/Feature/RoutePlannerTest.php
+```
+
+## Entregas pendientes de Jose
+
+Después de esta interfaz quedan **4 entregas estimadas**, con pruebas y documentación en cada una:
+
+1. **Escenarios:** controles rápidos Normal, Lluvia, Hora pico y Lluvia + Hora pico, y comparación de costos. La comparación de rutas completas dependerá de Dijkstra.
+2. **Resultados:** tiempo total, estaciones, transbordos, desglose y timeline del recorrido, integrados con la salida del algoritmo de Anderson.
+3. **Integración y pruebas finales:** conectar detección de hora pico/congestión, escenarios e interfaz con Dijkstra; acordar conexiones alternativas simuladas y la representación de transbordos para demostrar cambios de ruta.
+4. **Documentación académica final:** problema, arquitectura, modelo de datos, fórmula de pesos, clima y hora pico, ejemplos y guía de demostración. El README ya documenta parte de estos puntos.
+
+Esta división estima entregas, no commits ni una garantía de duración. Jose puede avanzar los escenarios mientras Anderson prepara el algoritmo. El cálculo real, sus resultados y la verificación conjunta requieren esa integración.
+
 ## Trabajo colaborativo
 
 Usamos ramas fijas: `dev/jose` y `dev/anderson`. `main` recibe entregas revisadas mediante Pull Requests. Antes de cada entrega, guarda tus cambios en commits y sincroniza tu rama (ejemplo de Jose):
@@ -157,7 +190,7 @@ Cada integrante trabaja en su propia rama, con commits pequeños por funcionalid
 
 Dijkstra consumirá el servicio de costos de Jose. La detección de hora pico y congestión pertenece a Anderson; Jose integrará sus penalizaciones sin duplicar esa lógica.
 
-Siguiente funcionalidad de Jose: interfaz del planificador con origen, destino, hora y clima, en `dev/jose`. El cálculo real de rutas se integrará cuando Anderson aporte Dijkstra.
+Siguiente funcionalidad de Jose: escenarios predefinidos y comparación de costos, en `dev/jose`.
 
 ## Herramientas de desarrollo
 
@@ -167,9 +200,9 @@ Laravel Boost está instalado como dependencia de desarrollo. Sus guías están 
 php artisan boost:install
 ```
 
-Para futuros recursos JavaScript y CSS:
+Para desarrollar los recursos JavaScript y CSS:
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
