@@ -14,6 +14,8 @@ class RouteCostService
     /**
      * Return simulated costs in whole minutes without changing the connection.
      * Traffic and transfer conditions must be determined by the caller.
+     * Congestion multiplier: 0 (low), 1 (medium), 2 (high). The default
+     * preserves the original boolean contract: congestion adds one penalty.
      *
      * @return array{base_time: int, weather_penalty: int, peak_hour_penalty: int, congestion_penalty: int, transfer_penalty: int, total: int}
      */
@@ -23,9 +25,14 @@ class RouteCostService
         bool $isPeakHour = false,
         bool $isCongested = false,
         bool $isTransfer = false,
+        int $congestionMultiplier = 1,
     ): array {
         if (! in_array($weather, [self::WEATHER_NORMAL, self::WEATHER_RAIN], true)) {
             throw new InvalidArgumentException('El clima debe ser normal o rain.');
+        }
+
+        if (! in_array($congestionMultiplier, [0, 1, 2], true)) {
+            throw new InvalidArgumentException('El multiplicador de congestion debe ser 0, 1 o 2.');
         }
 
         $costs = [];
@@ -46,7 +53,7 @@ class RouteCostService
 
         $costs['weather_penalty'] = $weather === self::WEATHER_RAIN ? $costs['weather_penalty'] : 0;
         $costs['peak_hour_penalty'] = $isPeakHour ? $costs['peak_hour_penalty'] : 0;
-        $costs['congestion_penalty'] = $isCongested ? $costs['congestion_penalty'] : 0;
+        $costs['congestion_penalty'] = $isCongested ? $costs['congestion_penalty'] * $congestionMultiplier : 0;
         $costs['transfer_penalty'] = $isTransfer ? $costs['transfer_penalty'] : 0;
         $total = array_sum($costs);
 

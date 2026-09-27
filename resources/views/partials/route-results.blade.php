@@ -5,6 +5,9 @@
     <div class="rounded-3xl border border-stone-200 bg-white p-6 sm:p-8">
         <p class="text-xs font-semibold uppercase tracking-widest text-emerald-700">Resultado / {{ $selected['label'] }}</p>
         <h2 id="route-results-title" class="mt-3 text-2xl font-semibold">Tu ruta calculada</h2>
+        @if (isset($selected['conditions']))
+            <p class="mt-3 text-sm text-stone-600">Hora pico: {{ $selected['conditions']['is_peak_hour'] ? 'Sí' : 'No' }} · Congestión {{ $selected['conditions']['congestion_level'] === 'high' ? 'alta' : 'baja' }} · Condiciones simuladas.</p>
+        @endif
         @if (! $selected['found'])
             <p role="status" class="mt-5 rounded-xl bg-amber-50 p-5 text-amber-900">No existe una ruta disponible entre estas estaciones en el sentido seleccionado.</p>
         @else
@@ -17,11 +20,11 @@
                 <div>
                     <h3 class="font-semibold">Desglose del costo</h3>
                     <dl class="mt-4 space-y-3 text-sm">
-                        @foreach (['base_time' => 'Tiempo base', 'weather_penalty' => 'Lluvia', 'peak_hour_penalty' => 'Hora pico', 'congestion_penalty' => 'Congestión (pendiente)', 'transfer_penalty' => 'Penalización por transbordo (pendiente)'] as $field => $label)
+                        @foreach (['base_time' => 'Tiempo base', 'weather_penalty' => 'Lluvia', 'peak_hour_penalty' => 'Hora pico', 'congestion_penalty' => 'Congestión', 'transfer_penalty' => 'Penalización por transbordo (pendiente)'] as $field => $label)
                             <div class="flex justify-between gap-4 border-b border-stone-100 pb-2"><dt>{{ $label }}</dt><dd class="shrink-0 font-semibold">{{ $selected['costs'][$field] }} min</dd></div>
                         @endforeach
                     </dl>
-                    <p class="mt-4 text-xs leading-relaxed text-stone-500">Se minimiza el costo de las conexiones con lluvia y hora pico simuladas. La hora de salida no activa penalizaciones automáticamente. Cambiar de línea todavía no añade tiempo.</p>
+                    <p class="mt-4 text-xs leading-relaxed text-stone-500">La hora de salida determina hora pico y congestión para todo el recorrido. Cambiar de línea todavía no añade tiempo.</p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Estación a estación</h3>
@@ -45,7 +48,7 @@
     </div>
     <div class="rounded-3xl border border-stone-200 bg-white p-6 sm:p-8">
         <h3 class="text-xl font-semibold">Comparación de rutas completas</h3>
-        <p class="mt-2 text-sm leading-relaxed text-stone-600">Dijkstra se ejecuta de nuevo para cada escenario con el mismo origen y destino. Los tiempos se comparan contra Normal.</p>
+        <p class="mt-2 text-sm leading-relaxed text-stone-600">Dijkstra se ejecuta de nuevo para cada escenario. Los cuatro escenarios de referencia excluyen congestión; tu selección incorpora el tráfico automático según la hora. Las diferencias se calculan respecto a Normal.</p>
         <div class="mt-5 overflow-x-auto" tabindex="0" role="region" aria-label="Comparación de rutas, desplazable horizontalmente">
             <table class="w-full min-w-[650px] text-left text-sm">
                 <thead class="border-b border-stone-200 text-stone-500"><tr><th scope="col" class="p-3">Escenario</th><th scope="col" class="p-3">Total</th><th scope="col" class="p-3">Diferencia</th><th scope="col" class="p-3">Recorrido</th></tr></thead>
