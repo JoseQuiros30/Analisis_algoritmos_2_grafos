@@ -139,6 +139,57 @@ No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionar�
 php artisan test --compact tests/Feature/RouteCostServiceTest.php
 ```
 
+## Hora pico y congestion (Anderson, parte 3)
+
+`TrafficConditionService::evaluate($departureTime, $congestionLevel = null)` ya implementa
+la deteccion que el contrato inicial de pesos dejaba pendiente. Son **reglas simuladas
+para fines academicos**, no horarios oficiales ni mediciones de trafico.
+
+- Hora local de Bogota en formato estricto `HH:MM`, de `00:00` a `23:59`.
+- Hora pico: `06:00 <= hora < 09:00` y `16:00 <= hora < 19:00`.
+- Sin fecha: se aplica la misma regla todos los dias, sin distinguir festivos.
+- Congestion automatica (`null`): `high` en hora pico y `low` fuera de ella.
+- Nivel explicito por conexion: `low`, `medium` o `high`. Reemplaza solo la
+  congestion; no desactiva la deteccion de hora pico.
+- Multiplicador de la penalizacion de congestion: bajo = 0, medio = 1, alto = 2.
+
+`TrafficCostService` conecta esta deteccion con `RouteCostService`, que conserva
+la responsabilidad de sumar los costos. Su parametro opcional final
+`congestionMultiplier = 1` mantiene compatibles todas las llamadas previas de Jose.
+La hora pico y la congestion son conceptos separados y cada penalizacion se suma una vez.
+
+```php
+use App\Services\TrafficCostService;
+
+// Inyectar TrafficCostService en el constructor o metodo del controlador.
+$result = $trafficCosts->calculate(
+    connection: $connection,
+    departureTime: '07:30',
+    weather: 'rain',
+    congestionLevel: null,
+    isTransfer: false,
+);
+$conditions = $result['conditions']; // is_peak_hour, congestion_level,
+                                    // is_congested, congestion_multiplier
+$weight = $result['costs']['total']; // Desglose con las mismas claves de RouteCostService.
+```
+
+Con base 4, lluvia 1, hora pico 2 y congestion 1: a las 12:00 en normal
+el total automatico es 4; a las 07:30 con lluvia y congestion alta automatica es
+`4 + 1 + 2 + (1 * 2) = 9`. El transbordo sigue siendo responsabilidad del llamador.
+Los calculos no modifican ni guardan la conexion.
+
+Para Dijkstra, usar la misma hora de salida en todas las aristas de una ejecucion:
+los pesos se calculan antes de recorrer el grafo, no al llegar a cada estacion.
+Una prueba con un grafo alternativo simulado verifica que la ruta cambia al aumentar
+los costos. El catalogo actual sigue siendo un arbol y no ofrece rutas alternativas.
+La conexion con el formulario, la construccion del grafo real y los resultados en
+pantalla siguen pendientes; esta entrega proporciona los servicios de integracion.
+
+```sh
+php artisan test --compact tests/Unit/Services/TrafficConditionServiceTest.php tests/Feature/Services/TrafficCostServiceTest.php tests/Feature/RouteCostServiceTest.php
+```
+
 ## Interfaz del planificador
 
 Desde la bienvenida, abre **Abrir el planificador** (`GET /planificador`, ruta `routes.index`). Los selectores consultan las estaciones reales de SQLite. El formulario incluye origen, destino, hora en Bogotá y clima Normal/Lluvia. El botón de intercambio requiere JavaScript; enviar y validar el formulario funciona también sin él.
