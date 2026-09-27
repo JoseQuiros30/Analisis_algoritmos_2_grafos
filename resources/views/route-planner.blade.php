@@ -12,7 +12,7 @@
     <header class="border-b border-emerald-900/10 bg-white">
         <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5">
             <a href="{{ route('home') }}" class="flex items-center gap-3 font-semibold tracking-tight"><span aria-hidden="true" class="grid size-10 place-items-center rounded-xl bg-emerald-900 text-lg text-lime-200">M</span> MetroRoute <span class="font-normal text-stone-500">/ Medellín</span></a>
-            <span class="rounded-full bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-800">Laboratorio de rutas</span>
+            <a href="{{ route('scenarios.index') }}" class="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline">Comparar escenarios →</a>
         </div>
     </header>
     <main id="planner" class="mx-auto max-w-7xl px-6 py-10 lg:py-14">
