@@ -17,14 +17,14 @@ class RoutePlannerTest extends TestCase
         $this->withoutVite();
     }
 
-    public function test_displays_stations_and_the_pending_calculation_notice(): void
+    public function test_displays_stations_and_the_calculate_button(): void
     {
         Station::factory()->create(['name' => 'Niquía']);
         Station::factory()->create(['name' => 'San Javier']);
 
         $this->get(route('routes.index'))->assertOk()
             ->assertSee('Niquía')->assertSee('San Javier')
-            ->assertSee('Cálculo pendiente de integración.');
+            ->assertSee('Calcular ruta');
     }
 
     public function test_disables_preparation_when_the_catalog_has_fewer_than_two_stations(): void
@@ -34,7 +34,7 @@ class RoutePlannerTest extends TestCase
             ->assertSee('type="submit" disabled', false);
     }
 
-    public function test_validates_a_selection_without_claiming_a_calculated_route(): void
+    public function test_reports_no_route_when_the_selected_stations_are_disconnected(): void
     {
         $payload = $this->validPayload();
 
@@ -44,7 +44,7 @@ class RoutePlannerTest extends TestCase
             ->assertSessionHas('selection', $payload);
         $this->get(route('routes.index'))->assertOk()
             ->assertSee('Selección validada')->assertSee('07:30')
-            ->assertSee('Cálculo pendiente de integración.');
+            ->assertSee('No existe una ruta disponible');
         $this->assertDatabaseCount('stations', 2);
     }
 
