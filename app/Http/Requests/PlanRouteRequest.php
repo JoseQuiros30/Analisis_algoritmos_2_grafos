@@ -21,6 +21,7 @@ class PlanRouteRequest extends FormRequest
             'destination_station_id' => ['bail', 'required', 'integer', Rule::exists(Station::class, 'id'), 'different:origin_station_id'],
             'departure_time' => ['bail', 'required', 'string', 'date_format:H:i'],
             'weather' => ['bail', 'required', 'string', Rule::in([RouteCostService::WEATHER_NORMAL, RouteCostService::WEATHER_RAIN])],
+            'is_peak_hour' => ['sometimes', 'required', 'boolean'],
         ];
     }
 
@@ -40,6 +41,8 @@ class PlanRouteRequest extends FormRequest
             'weather.required' => 'Selecciona una condición climática.',
             'weather.string' => 'Selecciona Normal o Lluvia.',
             'weather.in' => 'Selecciona Normal o Lluvia.',
+            'is_peak_hour.required' => 'Indica si deseas simular hora pico.',
+            'is_peak_hour.boolean' => 'La simulación de hora pico debe estar activada o desactivada.',
         ];
     }
 }
