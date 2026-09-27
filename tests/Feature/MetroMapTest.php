@@ -44,12 +44,13 @@ class MetroMapTest extends TestCase
         $this->followingRedirects()->post(route('routes.prepare'), [
             'origin_station_id' => $connection->origin_station_id,
             'destination_station_id' => $connection->destination_station_id,
-            'departure_time' => '09:00', 'weather' => 'rain',
+            'departure_time' => '07:30', 'weather' => 'rain',
         ])->assertOk()->assertViewHas('mapData', function (array $data) use ($connection): bool {
-            $result = $data['routeResults']['scenarios']['rain'];
+            $result = $data['routeResults']['scenarios'][$data['routeResults']['selected']];
 
-            return $result['found'] && $result['legs'][0]['connection_id'] === $connection->id
-                && $result['costs']['total'] === 5;
+            return $data['routeResults']['selected'] === 'trip' && $result['found'] && $result['legs'][0]['connection_id'] === $connection->id
+                && $result['costs']['congestion_penalty'] === 2
+                && $result['costs']['total'] === 9;
         });
     }
 }

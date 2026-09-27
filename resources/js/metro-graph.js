@@ -1,5 +1,5 @@
 import cytoscape from 'cytoscape';
-import { buildMapElements, routeTimeline } from './metro-map-data';
+import { buildMapElements, routeTimeline, formatLegDetails } from './metro-map-data';
 
 const container = document.querySelector('#metro-map');
 const payload = document.querySelector('#metro-map-data');
@@ -103,7 +103,7 @@ if (container && payload) {
         const edge = event.target;
         const leg = !stale && route?.legs.find((item) => Number(item.connection_id) === Number(edge.data('selectedId')));
         if (leg) {
-            detail.textContent = `${leg.origin} → ${leg.destination} · Línea ${leg.line} · ${leg.costs.total} min = ${leg.costs.base_time} base + ${leg.costs.weather_penalty} lluvia + ${leg.costs.peak_hour_penalty} hora pico.`;
+            detail.textContent = formatLegDetails(leg);
         } else {
             const names = new Map(data.stations.map((station) => [Number(station.id), station.name]));
             detail.textContent = edge.data('connections').map((connection) => `${names.get(Number(connection.origin_station_id))} → ${names.get(Number(connection.destination_station_id))}: ${connection.base_time} min base (línea ${connection.line})`).join(' / ');

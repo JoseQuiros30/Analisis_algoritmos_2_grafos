@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMapElements, routeTimeline } from '../../resources/js/metro-map-data.js';
+import { buildMapElements, routeTimeline, formatLegDetails } from '../../resources/js/metro-map-data.js';
 
 const stations = [{ id: 1, code: 'niquia', name: 'Niquía' }, { id: 2, code: 'bello', name: 'Bello' }, { id: 3, code: 'san-antonio', name: 'San Antonio' }];
 const connections = [
@@ -43,4 +43,11 @@ test('marks endpoints and accumulated labels using station ids rather than names
     assert.match(nodes[0].classes, /destination/);
     assert.equal(nodes[0].data.label, 'Niquía\n9 min');
     assert.equal(nodes[2].data.label, 'San Antonio');
+});
+
+test('details include congestion so the displayed breakdown matches the trip total', () => {
+    const leg = { origin: 'Universidad', destination: 'Hospital', line: 'A', costs: {
+        base_time: 4, weather_penalty: 1, peak_hour_penalty: 2, congestion_penalty: 2, transfer_penalty: 0, total: 9,
+    }};
+    assert.equal(formatLegDetails(leg), 'Universidad → Hospital · Línea A · 9 min = 4 base + 1 lluvia + 2 hora pico + 2 congestión + 0 transbordo.');
 });

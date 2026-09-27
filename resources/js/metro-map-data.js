@@ -56,3 +56,8 @@ export function buildMapElements(data, route) {
     });
     return [...nodes, ...edges];
 }
+
+export function formatLegDetails(leg) {
+    const costs = leg.costs;
+    return `${leg.origin} → ${leg.destination} · Línea ${leg.line} · ${costs.total} min = ${costs.base_time} base + ${costs.weather_penalty} lluvia + ${costs.peak_hour_penalty} hora pico + ${costs.congestion_penalty} congestión + ${costs.transfer_penalty} transbordo.`;
+}
