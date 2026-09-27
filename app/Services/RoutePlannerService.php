@@ -12,15 +12,18 @@ class RoutePlannerService
     public function __construct(
         private RouteCostService $costService,
         private DijkstraService $dijkstraService,
+        private TrafficCostService $trafficCosts,
+        private TrafficConditionService $trafficConditions,
     ) {}
 
     /**
-     * Use the same network snapshot for all scenarios. Congestion and transfer
-     * penalties remain disabled until their domain rules are integrated.
+     * Use the same network snapshot for the four reference scenarios and,
+     * when a departure time is provided, the actual trip with automatic traffic.
+     * Reference scenarios exclude congestion. Transfer penalties remain disabled.
      *
      * @return array<string, array<string, mixed>>
      */
-    public function compare(int $origin, int $destination): array
+    public function compare(int $origin, int $destination, ?string $departureTime = null, string $weather = RouteCostService::WEATHER_NORMAL): array
     {
         $stations = Station::orderBy('id')->get(['id', 'name'])->keyBy('id');
         $connections = Connection::orderBy('id')->get();
@@ -37,6 +40,15 @@ class RoutePlannerService
             ];
         }
 
+        if ($departureTime !== null) {
+            $results['trip'] = [
+                'label' => 'Tu selección (tráfico automático)',
+                'weather' => $weather,
+                'conditions' => $this->trafficConditions->evaluate($departureTime),
+                ...$this->calculate($stations, $connections, $origin, $destination, $weather, false, $departureTime),
+            ];
+        }
+
         return $results;
     }
 
@@ -47,9 +59,9 @@ class RoutePlannerService
      *
      * @param  Collection<int, Station>  $stations
      * @param  Collection<int, Connection>  $connections
-     * @return array{found: bool, stations: list<array{id: int, name: string}>, legs: list<array<string, mixed>>, costs: array<string, int>|null, transfer_count: int}
+     * @return array{found: bool, stations: list<array{id: int, name: string}>, legs: list<array<string, mixed>>, costs: array<string, int>|null, transfer_count: int, steps: list<array<string, mixed>>}
      */
-    private function calculate(Collection $stations, Collection $connections, int $origin, int $destination, string $weather, bool $isPeakHour): array
+    private function calculate(Collection $stations, Collection $connections, int $origin, int $destination, string $weather, bool $isPeakHour, ?string $departureTime = null): array
     {
         $graph = array_fill_keys($stations->modelKeys(), []);
         $edges = [];
@@ -57,7 +69,9 @@ class RoutePlannerService
         foreach ($connections as $connection) {
             $from = $connection->origin_station_id;
             $to = $connection->destination_station_id;
-            $costs = $this->costService->calculate($connection, $weather, $isPeakHour);
+            $costs = $departureTime === null
+                ? $this->costService->calculate($connection, $weather, $isPeakHour)
+                : $this->trafficCosts->calculate($connection, $departureTime, $weather)['costs'];
 
             if (! isset($graph[$from][$to]) || $costs['total'] < $graph[$from][$to]) {
                 $graph[$from][$to] = $costs['total'];
@@ -71,9 +85,9 @@ class RoutePlannerService
             }
         }
 
-        $route = $this->dijkstraService->findShortestPath($graph, $origin, $destination, recordSteps: false);
+        $route = $this->dijkstraService->findShortestPath($graph, $origin, $destination, recordSteps: $departureTime !== null);
         if ($route['totalCost'] === null) {
-            return ['found' => false, 'stations' => [], 'legs' => [], 'costs' => null, 'transfer_count' => 0];
+            return ['found' => false, 'stations' => [], 'legs' => [], 'costs' => null, 'transfer_count' => 0, 'steps' => $route['steps']];
         }
 
         $legs = [];
@@ -102,6 +116,7 @@ class RoutePlannerService
             'legs' => $legs,
             'costs' => $totals,
             'transfer_count' => $transfers,
+            'steps' => $route['steps'],
         ];
     }
 }

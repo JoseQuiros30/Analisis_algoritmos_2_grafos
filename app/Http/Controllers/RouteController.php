@@ -14,7 +14,7 @@ class RouteController extends Controller
     public function index(Request $request): View
     {
         $form = [];
-        foreach (['origin_station_id' => '', 'destination_station_id' => '', 'departure_time' => '09:00', 'weather' => 'normal', 'is_peak_hour' => '0'] as $field => $default) {
+        foreach (['origin_station_id' => '', 'destination_station_id' => '', 'departure_time' => '09:00', 'weather' => 'normal'] as $field => $default) {
             $value = $request->old($field, $default);
             $form[$field] = is_string($value) || is_int($value) ? (string) $value : $default;
         }
@@ -30,13 +30,14 @@ class RouteController extends Controller
     public function prepare(PlanRouteRequest $request, RoutePlannerService $planner): RedirectResponse
     {
         $selection = $request->validated();
-        $scenarios = $planner->compare((int) $selection['origin_station_id'], (int) $selection['destination_station_id']);
-        $key = $selection['weather'] === 'rain' ? 'rain' : 'normal';
-        if ($request->boolean('is_peak_hour')) {
-            $key = $key === 'rain' ? 'rain_peak_hour' : 'peak_hour';
-        }
+        $scenarios = $planner->compare(
+            (int) $selection['origin_station_id'],
+            (int) $selection['destination_station_id'],
+            $selection['departure_time'],
+            $selection['weather'],
+        );
 
         return to_route('routes.index')->withInput($selection)->with('selection', $selection)
-            ->with('routeResults', ['selected' => $key, 'scenarios' => $scenarios]);
+            ->with('routeResults', ['selected' => 'trip', 'scenarios' => $scenarios]);
     }
 }

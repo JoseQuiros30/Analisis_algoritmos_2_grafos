@@ -82,15 +82,18 @@ class RoutePlannerIntegrationTest extends TestCase
 
         $response = $this->post(route('routes.prepare'), [
             'origin_station_id' => $origin->id, 'destination_station_id' => $destination->id,
-            'departure_time' => '07:30', 'weather' => 'rain', 'is_peak_hour' => '1',
+            'departure_time' => '07:30', 'weather' => 'rain',
         ]);
 
         $response->assertRedirectToRoute('routes.index')->assertSessionHasNoErrors();
         $response->assertSessionHas('routeResults', function (array $results): bool {
             $selected = $results['scenarios'][$results['selected']];
 
-            return $results['selected'] === 'rain_peak_hour'
-                && $selected['costs']['total'] === 85
+            return $results['selected'] === 'trip'
+                && $selected['costs']['total'] === 111
+                && $selected['costs']['congestion_penalty'] === 26
+                && $selected['conditions']['is_peak_hour'] === true
+                && count($selected['steps']) > 0
                 && count($selected['stations']) === 14
                 && $selected['transfer_count'] === 1;
         });
@@ -98,15 +101,75 @@ class RoutePlannerIntegrationTest extends TestCase
             ->assertSee('Comparación de rutas completas')->assertSee('Llegada')->assertSee('Niquía')->assertSee('San Javier');
     }
 
-    public function test_rejects_invalid_peak_hour_flags(): void
+    public function test_ignores_forged_costs_and_peak_flags_and_uses_departure_time(): void
     {
         $this->withoutVite();
         [$origin, $destination] = Station::factory()->count(2)->create()->all();
+        $this->connect($origin, $destination);
 
         $this->post(route('routes.prepare'), [
             'origin_station_id' => $origin->id, 'destination_station_id' => $destination->id,
-            'departure_time' => '07:30', 'weather' => 'normal', 'is_peak_hour' => 'yes',
-        ])->assertSessionHasErrors(['is_peak_hour']);
+            'departure_time' => '07:30', 'weather' => 'normal', 'is_peak_hour' => '0',
+            'total' => 1, 'congestion_multiplier' => 0,
+        ])->assertSessionHasNoErrors()
+            ->assertSessionHas('routeResults.scenarios.trip.costs.total', 8)
+            ->assertSessionHas('routeResults.scenarios.trip.conditions.is_peak_hour', true);
+    }
+
+    public function test_departure_time_changes_the_selected_route_and_retains_history(): void
+    {
+        [$origin, $middle, $destination] = Station::factory()->count(3)->create()->all();
+        $this->connect($origin, $destination, ['base_time' => 4, 'peak_hour_penalty' => 2, 'congestion_penalty' => 2]);
+        $first = $this->connect($origin, $middle, ['base_time' => 3, 'peak_hour_penalty' => 0, 'congestion_penalty' => 0]);
+        $last = $this->connect($middle, $destination, ['base_time' => 3, 'peak_hour_penalty' => 0, 'congestion_penalty' => 0]);
+        $planner = app(RoutePlannerService::class);
+
+        $normal = $planner->compare($origin->id, $destination->id, '12:00')['trip'];
+        $peak = $planner->compare($origin->id, $destination->id, '07:30')['trip'];
+
+        $this->assertSame(4, $normal['costs']['total']);
+        $this->assertSame([$origin->id, $destination->id], array_column($normal['stations'], 'id'));
+        $this->assertSame([$first->id, $last->id], array_column($peak['legs'], 'connection_id'));
+        $this->assertSame(6, $peak['costs']['total']);
+        $this->assertSame($origin->id, $peak['steps'][0]['currentNode']);
+        $this->assertSame(6.0, $peak['steps'][array_key_last($peak['steps'])]['distances'][$destination->id]);
+    }
+
+    public function test_selected_trip_uses_direction_and_parallel_edge_identity(): void
+    {
+        [$origin, $destination] = Station::factory()->count(2)->create()->all();
+        $this->connect($origin, $destination, ['line' => 'A', 'base_time' => 2, 'congestion_penalty' => 10]);
+        $best = $this->connect($origin, $destination, ['line' => 'B', 'base_time' => 3, 'congestion_penalty' => 0]);
+        $planner = app(RoutePlannerService::class);
+
+        $trip = $planner->compare($origin->id, $destination->id, '07:30')['trip'];
+        $reverse = $planner->compare($destination->id, $origin->id, '07:30')['trip'];
+
+        $this->assertSame($best->id, $trip['legs'][0]['connection_id']);
+        $this->assertSame('B', $trip['legs'][0]['line']);
+        $this->assertSame(5, $trip['costs']['total']);
+        $this->assertFalse($reverse['found']);
+        $this->assertNull($reverse['costs']);
+        $this->assertSame([], $reverse['stations']);
+        $this->assertSame($destination->id, $reverse['steps'][0]['currentNode']);
+    }
+
+    public function test_http_result_outside_peak_uses_low_congestion_and_escapes_route_names(): void
+    {
+        $this->withoutVite();
+        $origin = Station::factory()->create(['name' => '<script>alert(1)</script>']);
+        $destination = Station::factory()->create();
+        $this->connect($origin, $destination);
+
+        $response = $this->followingRedirects()->post(route('routes.prepare'), [
+            'origin_station_id' => (string) $origin->id, 'destination_station_id' => (string) $destination->id,
+            'departure_time' => '09:00', 'weather' => 'rain', 'is_peak_hour' => '1',
+        ]);
+
+        $response->assertSee('Hora pico: No')->assertSee('Congestión baja')
+            ->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)
+            ->assertDontSee('<script>alert(1)</script>', false)
+            ->assertViewHas('routeResults', fn (array $results): bool => $results['scenarios']['trip']['costs']['total'] === 5);
     }
 
     private function connect(Station $origin, Station $destination, array $costs = []): Connection

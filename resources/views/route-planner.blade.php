@@ -48,7 +48,7 @@
                     <div>
                         <label for="departure_time" class="mb-2 block text-sm font-semibold">Hora de salida <span class="font-normal text-stone-500">· Bogotá</span></label>
                         <input type="time" id="departure_time" name="departure_time" value="{{ $form['departure_time'] }}" required class="planner-input" aria-invalid="{{ $errors->has('departure_time') ? 'true' : 'false' }}" aria-describedby="departure-help">
-                        <p id="departure-help" class="mt-2 text-xs leading-relaxed text-stone-500">Hora de referencia. La detección automática de hora pico aún no está integrada; utiliza el control de simulación.</p>
+                        <p id="departure-help" class="mt-2 text-xs leading-relaxed text-stone-500">Hora pico simulada: 06:00–08:59 y 16:00–18:59. Congestión alta en esas franjas y baja fuera de ellas.</p>
                         @error('departure_time')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
                     </div>
                     <fieldset>
@@ -60,11 +60,6 @@
                         </div>
                         @error('weather')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
                     </fieldset>
-                    <div>
-                        <input type="hidden" name="is_peak_hour" value="0">
-                        <label class="flex items-center gap-3 text-sm font-semibold"><input type="checkbox" name="is_peak_hour" value="1" @checked($form['is_peak_hour'] === '1') class="accent-emerald-800"> Simular hora pico</label>
-                        @error('is_peak_hour')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
-                    </div>
                     <button type="submit" @disabled($stations->count() < 2) class="w-full rounded-xl bg-emerald-900 px-4 py-3.5 font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Calcular ruta <span aria-hidden="true">→</span></button>
                     <p class="text-xs leading-relaxed text-stone-500">Calcula la ruta de menor costo para las condiciones seleccionadas y compara los cuatro escenarios.</p>
                 </form>
@@ -103,7 +98,7 @@
                     <p class="mt-5 text-sm leading-relaxed text-stone-600">Calcula una ruta para revisar las estaciones y condiciones seleccionadas.</p>
                 @endif
                 <p id="selection-changed" hidden role="status" class="mt-5 text-sm text-amber-800">Cambiaste las condiciones. Calcula la ruta otra vez para actualizar los resultados.</p>
-                <p class="mt-6 border-t border-stone-100 pt-5 text-xs leading-relaxed text-stone-500">Congestión y penalización por transbordo no incluidas. Los transbordos se cuentan como cambios de línea.</p>
+                <p class="mt-6 border-t border-stone-100 pt-5 text-xs leading-relaxed text-stone-500">Hora pico y congestión se calculan según la salida. Los cambios de línea se cuentan como transbordos, sin penalización de tiempo adicional.</p>
             </aside>
         </div>
         @if ($routeResults)
