@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PlanRouteRequest;
+use App\Models\Connection;
 use App\Models\Station;
 use App\Services\RoutePlannerService;
 use Illuminate\Http\RedirectResponse;
@@ -19,8 +20,15 @@ class RouteController extends Controller
             $form[$field] = is_string($value) || is_int($value) ? (string) $value : $default;
         }
 
+        $stations = Station::orderBy('name')->orderBy('id')->get(['id', 'code', 'name']);
+
         return view('route-planner', [
-            'stations' => Station::orderBy('name')->orderBy('id')->get(['id', 'name']),
+            'stations' => $stations,
+            'mapData' => [
+                'stations' => $stations->toArray(),
+                'connections' => Connection::orderBy('id')->get(['id', 'origin_station_id', 'destination_station_id', 'line', 'base_time'])->toArray(),
+                'routeResults' => $request->session()->get('routeResults'),
+            ],
             'form' => $form,
             'selection' => $request->session()->get('selection'),
             'routeResults' => $request->session()->get('routeResults'),

@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "test:map": "node --test tests/JavaScript/metro-map.test.js"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
@@ -15,5 +16,8 @@
     },
     "optionalDependencies": {
         "@laravel/multiplex": "^0.4.1"
+    },
+    "dependencies": {
+        "cytoscape": "^3.34.3"
     }
 }

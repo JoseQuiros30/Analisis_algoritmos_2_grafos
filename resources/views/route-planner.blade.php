@@ -23,7 +23,7 @@
         @if ($errors->any())
             <div role="alert" class="mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-900"><p class="font-semibold">Revisa los datos del recorrido.</p><ul class="mt-2 list-inside list-disc text-sm">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
         @endif
-        <div class="grid items-start gap-6 lg:grid-cols-[350px_minmax(0,1fr)] xl:grid-cols-[330px_minmax(0,1fr)_280px]">
+        <div class="grid items-start gap-6 lg:grid-cols-[310px_minmax(0,1fr)]">
             <section class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm" aria-labelledby="configuration-title">
                 <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-700">01 / Configurar</p>
                 <h2 id="configuration-title" class="mb-6 text-xl font-semibold">¿A dónde vamos?</h2>
@@ -69,24 +69,8 @@
                     <p class="text-xs leading-relaxed text-stone-500">Calcula la ruta de menor costo para las condiciones seleccionadas y compara los cuatro escenarios.</p>
                 </form>
             </section>
-            <section class="overflow-hidden rounded-3xl bg-emerald-950 text-white" aria-labelledby="network-title">
-                <div class="p-7 sm:p-8">
-                    <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-lime-200">02 / Explorar</p>
-                    <h2 id="network-title" class="text-2xl font-semibold">Una red de posibilidades.</h2>
-                    <p class="mt-3 text-sm leading-relaxed text-emerald-100/80">Cada estación es un vértice. Cada conexión, una arista cuyo costo depende de las condiciones del recorrido.</p>
-                    <div class="my-7 rounded-2xl border border-white/15 bg-white/5 p-6">
-                        <p class="text-xs uppercase tracking-widest text-emerald-200">Visualización del grafo</p>
-                        <p class="mt-3 text-lg font-medium">Próximamente</p>
-                        <p class="mt-2 text-sm leading-relaxed text-emerald-100/75">Aquí podrás explorar las conexiones y ver la ruta calculada.</p>
-                    </div>
-                    <div class="flex items-center justify-between gap-3"><h3 class="text-sm font-semibold">Estaciones del catálogo</h3><span class="rounded-full bg-lime-200 px-3 py-1 text-xs font-bold text-emerald-950">{{ $stations->count() }}</span></div>
-                    <ul class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs text-emerald-50 sm:text-sm">
-                        @forelse ($stations as $station)<li class="flex items-start gap-2"><span aria-hidden="true" class="mt-1.5 size-1.5 shrink-0 rounded-full bg-lime-200"></span>{{ $station->name }}</li>@empty<li class="col-span-2">El catálogo estará disponible pronto.</li>@endforelse
-                    </ul>
-                    <p class="mt-6 text-xs leading-relaxed text-emerald-200/75">Catálogo alfabético de una selección académica. No indica el orden del recorrido.</p>
-                </div>
-            </section>
-            <aside class="rounded-3xl border border-stone-200 bg-white p-6 lg:col-span-2 xl:col-span-1" aria-labelledby="summary-title">
+            @include('partials.metro-map')
+            <aside class="rounded-3xl border border-stone-200 bg-white p-6 lg:col-start-1" aria-labelledby="summary-title">
                 <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-emerald-700">03 / Tu recorrido</p>
                 <h2 id="summary-title" class="text-xl font-semibold">Resumen</h2>
                 @if ($selection)
