@@ -5,9 +5,13 @@ if (form) {
     const destination = form.querySelector('#destination_station_id');
     const swap = form.querySelector('#swap-stations');
     const summary = document.querySelector('#validated-selection');
+    const results = document.querySelector('#route-results');
     const changed = document.querySelector('#selection-changed');
 
     function invalidateSummary() {
+        if (results) {
+            results.hidden = true;
+        }
         if (summary) {
             summary.hidden = true;
             changed.hidden = false;

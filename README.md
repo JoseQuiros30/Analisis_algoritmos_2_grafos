@@ -8,7 +8,7 @@ Los tiempos y penalizaciones serán datos simulados para fines académicos. La a
 
 Primera entrega de Jose: base de Laravel, SQLite, zona horaria `America/Bogota`, idioma español y bienvenida en `/` (ruta `home`). La comprobación de salud de Laravel está en `/up`.
 
-Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El servicio de pesos dinámicos ya calcula costos por conexión y `/escenarios` compara los cuatro escenarios predefinidos. La interfaz permite preparar y validar un recorrido en `/planificador`; Dijkstra todavía no está integrado.
+Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El servicio de pesos dinámicos ya calcula costos por conexión y `/escenarios` compara los cuatro escenarios predefinidos. El planificador integra Dijkstra de Anderson con los costos de Jose: calcula rutas, muestra su desglose y compara rutas completas en cuatro escenarios.
 
 ## Instalación local
 
@@ -42,7 +42,7 @@ php artisan route:list --except-vendor
 php artisan test --compact
 ```
 
-La página inicial muestra MetroRoute Medellín y el enlace «Abrir el planificador». El planificador valida la selección pero todavía no calcula rutas.
+La página inicial muestra MetroRoute Medellín y el enlace «Abrir el planificador». El planificador calcula rutas con costos simulados y compara los cuatro escenarios.
 
 ## Estaciones
 
@@ -50,7 +50,7 @@ La página inicial muestra MetroRoute Medellín y el enlace «Abrir el planifica
 
 `StationSeeder` busca por código y actualiza el nombre sin duplicar estaciones ni cambiar sus IDs. Conserva estaciones adicionales. Puedes ejecutarlo de nuevo con `php artisan db:seed --class=StationSeeder`. El seeder general ahora carga estaciones y no crea el usuario de ejemplo de Laravel.
 
-Las líneas y los transbordos se definirán al implementar conexiones: una estación compartida, como San Antonio, conserva un único registro. Cada estación expone `outgoingConnections()` e `incomingConnections()`. Todavía no hay cálculo de rutas.
+Las líneas y los transbordos se definirán al implementar conexiones: una estación compartida, como San Antonio, conserva un único registro. Cada estación expone `outgoingConnections()` e `incomingConnections()`. El planificador ya utiliza estas conexiones para calcular rutas.
 
 Para revisar la tabla y ejecutar sus pruebas:
 
@@ -133,30 +133,103 @@ Ejemplos para una conexión con tiempo base 4, lluvia 1, hora pico 2 y congesti�
 
 El servicio rechaza climas desconocidos y costos inválidos con `InvalidArgumentException`, incluso si una penalización inválida está inactiva. Revisa los valores sin convertirlos primero a los casts de Eloquent para no ocultar fracciones o datos corruptos. Exige tiempo base positivo y penalizaciones no negativas; también rechaza desbordamiento del total. Una capa HTTP futura deberá validar los controles y convertirlos a los tipos de este contrato.
 
-No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionará conexiones bloqueadas en la construcción del grafo o en Dijkstra. Los escenarios de la tabla están cubiertos por pruebas del servicio. La comparación visual por conexión está disponible en `/escenarios`; comparar rutas completas sigue pendiente de Dijkstra.
+No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionará conexiones bloqueadas en la construcción del grafo o en Dijkstra. Los escenarios de la tabla están cubiertos por pruebas del servicio. La comparación visual por conexión está disponible en `/escenarios`; la comparación de rutas completas está disponible en `/planificador`.
 
 ```sh
 php artisan test --compact tests/Feature/RouteCostServiceTest.php
 ```
 
-## Interfaz del planificador
+## Hora pico y congestion (Anderson, parte 3)
 
-Desde la bienvenida, abre **Abrir el planificador** (`GET /planificador`, ruta `routes.index`). Los selectores consultan las estaciones reales de SQLite. El formulario incluye origen, destino, hora en Bogotá y clima Normal/Lluvia. El botón de intercambio requiere JavaScript; enviar y validar el formulario funciona también sin él.
+`TrafficConditionService::evaluate($departureTime, $congestionLevel = null)` ya implementa
+la deteccion que el contrato inicial de pesos dejaba pendiente. Son **reglas simuladas
+para fines academicos**, no horarios oficiales ni mediciones de trafico.
 
-`POST /planificador` (`routes.prepare`) valida los datos mediante `PlanRouteRequest`: estaciones existentes y distintas, hora HH:MM y clima permitido. Conserva las selecciones tras un error y devuelve mensajes en español. Una selección correcta aparece en el resumen, sin guardar un viaje ni calcular tiempos. El resumen es temporal y se muestra tras el envío; JavaScript lo oculta si cambias las condiciones para evitar mostrar datos desactualizados.
+- Hora local de Bogota en formato estricto `HH:MM`, de `00:00` a `23:59`.
+- Hora pico: `06:00 <= hora < 09:00` y `16:00 <= hora < 19:00`.
+- Sin fecha: se aplica la misma regla todos los dias, sin distinguir festivos.
+- Congestion automatica (`null`): `high` en hora pico y `low` fuera de ella.
+- Nivel explicito por conexion: `low`, `medium` o `high`. Reemplaza solo la
+  congestion; no desactiva la deteccion de hora pico.
+- Multiplicador de la penalizacion de congestion: bajo = 0, medio = 1, alto = 2.
 
-«Calcular ruta» permanece deshabilitado hasta integrar Dijkstra. El área central muestra el catálogo alfabético y reserva el espacio para el grafo de Anderson; no simula una ruta ni dibuja conexiones inventadas. Con menos de dos estaciones se deshabilita la preparación.
+`TrafficCostService` conecta esta deteccion con `RouteCostService`, que conserva
+la responsabilidad de sumar los costos. Su parametro opcional final
+`congestionMultiplier = 1` mantiene compatibles todas las llamadas previas de Jose.
+La hora pico y la congestion son conceptos separados y cada penalizacion se suma una vez.
 
-Verificación manual:
+```php
+use App\Services\TrafficCostService;
 
-1. Ejecuta `npm run build` y `php artisan serve`; entra por el enlace de la bienvenida.
-2. Selecciona Niquía y San Javier, hora 07:30 y Lluvia. Pulsa «Preparar recorrido» y revisa el resumen.
-3. Cambia un control: el resumen anterior debe ocultarse. Intercambia las estaciones y vuelve a enviar.
-4. Selecciona el mismo origen y destino: debe aparecer un error en español conservando los demás controles.
-5. Revisa el formulario con teclado y en una ventana estrecha. Sin JavaScript, el envío sigue funcionando.
+// Inyectar TrafficCostService en el constructor o metodo del controlador.
+$result = $trafficCosts->calculate(
+    connection: $connection,
+    departureTime: '07:30',
+    weather: 'rain',
+    congestionLevel: null,
+    isTransfer: false,
+);
+$conditions = $result['conditions']; // is_peak_hour, congestion_level,
+                                    // is_congested, congestion_multiplier
+$weight = $result['costs']['total']; // Desglose con las mismas claves de RouteCostService.
+```
+
+Con base 4, lluvia 1, hora pico 2 y congestion 1: a las 12:00 en normal
+el total automatico es 4; a las 07:30 con lluvia y congestion alta automatica es
+`4 + 1 + 2 + (1 * 2) = 9`. El transbordo sigue siendo responsabilidad del llamador.
+Los calculos no modifican ni guardan la conexion.
+
+Para Dijkstra, usar la misma hora de salida en todas las aristas de una ejecucion:
+los pesos se calculan antes de recorrer el grafo, no al llegar a cada estacion.
+Una prueba con un grafo alternativo simulado verifica que la ruta cambia al aumentar
+los costos. El catalogo actual sigue siendo un arbol y no ofrece rutas alternativas.
+La conexion con el formulario y el grafo real ya utiliza estos servicios; el
+resultado seleccionado incorpora hora pico y congestion automaticas.
 
 ```sh
-php artisan test --compact tests/Feature/RoutePlannerTest.php
+php artisan test --compact tests/Unit/Services/TrafficConditionServiceTest.php tests/Feature/Services/TrafficCostServiceTest.php tests/Feature/RouteCostServiceTest.php
+```
+
+## Planificador y resultados de rutas completas
+
+Desde la bienvenida, abre **Abrir el planificador** (`GET /planificador`, ruta `routes.index`). El formulario consulta las estaciones de SQLite y recibe origen, destino, hora de salida en Bogotá y clima. La hora activa automáticamente hora pico y congestión según las reglas simuladas anteriores. El botón de intercambio requiere JavaScript; calcular funciona también sin él.
+
+`POST /planificador` (`routes.prepare`) valida estaciones existentes y distintas, hora HH:MM y clima permitido. Los indicadores de tráfico y costos enviados por el cliente no se utilizan. Conserva las selecciones tras un error y devuelve mensajes en español. El cálculo redirige al formulario con resultados temporales en sesión; no guarda un viaje ni modifica los costos de las conexiones. Si cambias los controles, JavaScript oculta los resultados anteriores hasta que vuelvas a calcular.
+
+### Integración con Dijkstra
+
+`RoutePlannerService::compare(int $origin, int $destination)` carga estaciones y conexiones una vez, y reutiliza esa red para los cuatro escenarios definidos por `ScenarioComparisonService`. Para cada uno:
+
+El formulario pasa además `departureTime` y `weather`: `compare($origin, $destination, '07:30', 'rain')`. Esto añade la entrada `trip` con la ruta seleccionada y sus `conditions`, calculada mediante `TrafficCostService` sobre la misma red. Se devuelve su historial en `steps` para el futuro panel académico. Los cuatro escenarios de referencia siguen sin congestión para aislar clima y hora pico; la tabla distingue la quinta fila de tráfico automático.
+
+1. Calcula los pesos finales con `RouteCostService`.
+2. Construye una lista de adyacencia dirigida, incluyendo estaciones aisladas.
+3. Si varias conexiones unen el mismo origen y destino, conserva la de menor costo; en empate, el menor ID. Guarda su identidad para reconstruir la línea y desglose correctos.
+4. Invoca `DijkstraService::findShortestPath(..., recordSteps: false)` de Anderson, sin reemplazar su algoritmo.
+5. Reconstruye las estaciones, conexiones elegidas y sumas de cada componente. Cuenta cambios consecutivos de línea como transbordos; no cuenta el abordaje inicial.
+
+Cada escenario devuelve `found`, `stations` (ID y nombre), `legs` (ID de conexión, nombres de extremos, línea y costos), `costs` (totales del desglose, o `null` si no existe ruta), `transfer_count` y los metadatos del escenario. Una ruta inexistente se muestra como **Sin ruta**, nunca como cero minutos. Los sentidos inversos solo existen si están cargados en la base de datos.
+
+El resultado seleccionado muestra tiempo total, número de estaciones incluidos ambos extremos, transbordos, desglose y timeline. La tabla inferior ejecuta Dijkstra de nuevo por escenario; no se limita a sumar penalizaciones al camino que ganó en Normal.
+
+### Límites actuales
+
+- La hora de salida se mantiene fija para todas las aristas; no se simula la evolución del tráfico durante el viaje. El formulario utiliza congestión automática, aunque el servicio admite niveles explícitos.
+- El costo contextual de transbordo está desactivado. El conteo de cambios de línea es informativo y no participa como criterio de desempate.
+- La minimización de conexiones paralelas es correcta para los pesos actuales, independientes de la línea anterior. Cuando se cobre por cambiar de línea, será necesario representar estados estación/línea o conexiones explícitas de transbordo; no basta con añadir la penalización después de Dijkstra.
+- El grafo visual, panel académico e incidentes siguen pendientes de Anderson. Se conserva el historial solo de `trip` en sesión, no el de los cuatro escenarios de referencia. Esta estrategia está pensada para el catálogo académico pequeño.
+- El catálogo actual tiene un único camino simple por par. Las pruebas usan una red pequeña de ejemplo con alternativas y demuestran que la lluvia cambia la ruta; aún falta acordar alternativas simuladas para la demostración en pantalla.
+
+### Prueba manual
+
+1. Ejecuta `npm run build` y `php artisan serve`; abre el planificador.
+2. Con el catálogo simulado original, selecciona Niquía → San Javier, 07:30 y Lluvia. Pulsa **Calcular ruta**.
+3. Debes ver **111 minutos**, **14 estaciones** y **1 transbordo**: base 46 + lluvia 13 + hora pico 26 + congestión 26. Las cuatro referencias siguen mostrando 46, 59, 72 y 85 minutos; la quinta fila muestra tu selección de 111 minutos.
+4. Cambia la hora a 09:00 y calcula nuevamente: Lluvia debe dar 59 minutos, sin hora pico ni congestión. Los valores cambian si modificaste los costos del catálogo.
+5. Selecciona origen y destino iguales para comprobar el error. Revisa el formulario con teclado y en una ventana estrecha; sin JavaScript, el envío sigue funcionando.
+
+```sh
+php artisan test --compact tests/Feature/RoutePlannerIntegrationTest.php tests/Feature/RoutePlannerTest.php
 ```
 
 ## Comparación de escenarios por conexión
@@ -181,7 +254,7 @@ $rainMinutes = $comparison['rain']['costs']['total'];
 $extraMinutes = $comparison['rain']['difference'];
 ```
 
-En código de aplicación, inyecta el servicio en el constructor o en el controlador. Este ejemplo también puede utilizarse en Tinker con una conexión cargada. El servicio está listo para reutilizar sus escenarios cuando se integre Dijkstra, pero esta comparación no calcula ni elige una ruta completa.
+En código de aplicación, inyecta el servicio en el constructor o en el controlador. Este ejemplo también puede utilizarse en Tinker con una conexión cargada. El planificador reutiliza estos mismos escenarios para calcular rutas completas; la pantalla `/escenarios` continúa comparando un solo tramo.
 
 Prueba manual: elige un tramo de la línea A del catálogo sin modificar, selecciona Lluvia + hora pico y envía. Deben aparecer totales 4, 5, 6 y 7 minutos, diferencias 0, 1, 2 y 3, y una tarjeta de 7 minutos. En un tramo de la línea B los totales son 3, 4, 5 y 6. Comprueba también el sentido inverso y el formulario sin JavaScript.
 
@@ -192,13 +265,12 @@ npm run build
 
 ## Entregas pendientes de Jose
 
-Con la comparación **por conexión** terminada quedan **3 entregas estimadas**:
+Con resultados y comparación de rutas completas implementados quedan **2 bloques de cierre**:
 
-1. **Resultados e integración de escenarios por ruta:** tiempo total, estaciones, transbordos, desglose, timeline y comparación de rutas completas. Requiere la salida real de Dijkstra de Anderson.
-2. **Integración y pruebas finales:** conectar detección de hora pico/congestión; acordar conexiones alternativas simuladas y representación de transbordos para demostrar cambios de ruta. Depende de ambos integrantes.
-3. **Documentación académica final:** consolidar problema, arquitectura, datos, fórmula de pesos, clima y hora pico, ejemplos y guía de demostración con los comportamientos finales. El README ya cubre la implementación actual de Jose.
+1. **Integración y pruebas finales:** acordar transbordos y conexiones alternativas simuladas. Verificar la integración con el grafo visual y modo académico cuando estén disponibles. Hora pico y congestión ya están conectadas al planificador.
+2. **Documentación académica final y demostración:** consolidar la arquitectura definitiva, limitaciones resueltas, ejemplos y guía de exposición. El README describe la implementación actual y los pendientes explícitos.
 
-La comparación de escenarios por ruta sigue pendiente dentro de la primera entrega; la pantalla por conexión no la reemplaza. Esta división estima entregas, no commits ni duración. Jose puede revisar su documentación mientras Anderson prepara el algoritmo; el cierre funcional requiere esa integración.
+Dijkstra, su registro, hora pico automática y congestión ya están integrados. Visualización, panel académico e incidentes siguen pendientes de Anderson.
 
 ## Trabajo colaborativo
 
@@ -218,9 +290,9 @@ Cada integrante trabaja en su propia rama, con commits pequeños por funcionalid
 - **Jose:** configuración, estaciones y conexiones, pesos dinámicos y clima, interfaz, comparación de escenarios, resultados y sus pruebas.
 - **Anderson:** Dijkstra, registro de ejecución, detección de hora pico y congestión, visualización con Cytoscape, modo académico, incidentes y sus pruebas.
 
-Dijkstra consumirá el servicio de costos de Jose. La detección de hora pico y congestión pertenece a Anderson; Jose integrará sus penalizaciones sin duplicar esa lógica.
+El adaptador de Jose calcula los pesos y se los entrega al Dijkstra de Anderson. La detección de hora pico y congestión pertenece a Anderson; Jose integrará sus penalizaciones sin duplicar esa lógica.
 
-Siguiente funcionalidad de Jose: resultados y comparación de rutas completas cuando esté disponible Dijkstra, en `dev/jose`.
+Siguiente entrega de Jose: cierre de integración y demostración, coordinando los módulos pendientes de Anderson, en `dev/jose`.
 
 ## Herramientas de desarrollo
 

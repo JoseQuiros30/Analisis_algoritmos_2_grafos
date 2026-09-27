@@ -136,4 +136,26 @@ class RouteCostServiceTest extends TestCase
             'transfer_penalty' => 3,
         ]);
     }
+
+    #[DataProvider('invalidCongestionMultipliers')]
+    public function test_rejects_invalid_congestion_multipliers_even_when_inactive(int $multiplier): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('multiplicador');
+
+        (new RouteCostService)->calculate($this->connection(), congestionMultiplier: $multiplier);
+    }
+
+    public static function invalidCongestionMultipliers(): array
+    {
+        return ['negative' => [-1], 'above high' => [3]];
+    }
+
+    public function test_inactive_congestion_does_not_apply_high_multiplier(): void
+    {
+        $result = (new RouteCostService)->calculate($this->connection(), congestionMultiplier: 2);
+
+        $this->assertSame(0, $result['congestion_penalty']);
+        $this->assertSame(4, $result['total']);
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PlanRouteRequest;
 use App\Models\Station;
+use App\Services\RoutePlannerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -22,13 +23,21 @@ class RouteController extends Controller
             'stations' => Station::orderBy('name')->orderBy('id')->get(['id', 'name']),
             'form' => $form,
             'selection' => $request->session()->get('selection'),
+            'routeResults' => $request->session()->get('routeResults'),
         ]);
     }
 
-    public function prepare(PlanRouteRequest $request): RedirectResponse
+    public function prepare(PlanRouteRequest $request, RoutePlannerService $planner): RedirectResponse
     {
         $selection = $request->validated();
+        $scenarios = $planner->compare(
+            (int) $selection['origin_station_id'],
+            (int) $selection['destination_station_id'],
+            $selection['departure_time'],
+            $selection['weather'],
+        );
 
-        return to_route('routes.index')->withInput($selection)->with('selection', $selection);
+        return to_route('routes.index')->withInput($selection)->with('selection', $selection)
+            ->with('routeResults', ['selected' => 'trip', 'scenarios' => $scenarios]);
     }
 }

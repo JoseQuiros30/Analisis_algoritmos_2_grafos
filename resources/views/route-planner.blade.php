@@ -48,7 +48,7 @@
                     <div>
                         <label for="departure_time" class="mb-2 block text-sm font-semibold">Hora de salida <span class="font-normal text-stone-500">· Bogotá</span></label>
                         <input type="time" id="departure_time" name="departure_time" value="{{ $form['departure_time'] }}" required class="planner-input" aria-invalid="{{ $errors->has('departure_time') ? 'true' : 'false' }}" aria-describedby="departure-help">
-                        <p id="departure-help" class="mt-2 text-xs leading-relaxed text-stone-500">Hora de la simulación; no representa horarios oficiales de servicio.</p>
+                        <p id="departure-help" class="mt-2 text-xs leading-relaxed text-stone-500">Hora pico simulada: 06:00–08:59 y 16:00–18:59. Congestión alta en esas franjas y baja fuera de ellas.</p>
                         @error('departure_time')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
                     </div>
                     <fieldset>
@@ -60,8 +60,8 @@
                         </div>
                         @error('weather')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
                     </fieldset>
-                    <button type="submit" @disabled($stations->count() < 2) class="w-full rounded-xl bg-emerald-900 px-4 py-3.5 font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Preparar recorrido <span aria-hidden="true">→</span></button>
-                    <p class="text-xs leading-relaxed text-stone-500">Valida tu selección. El cálculo de la mejor ruta estará disponible en una próxima entrega.</p>
+                    <button type="submit" @disabled($stations->count() < 2) class="w-full rounded-xl bg-emerald-900 px-4 py-3.5 font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Calcular ruta <span aria-hidden="true">→</span></button>
+                    <p class="text-xs leading-relaxed text-stone-500">Calcula la ruta de menor costo para las condiciones seleccionadas y compara los cuatro escenarios.</p>
                 </form>
             </section>
             <section class="overflow-hidden rounded-3xl bg-emerald-950 text-white" aria-labelledby="network-title">
@@ -95,15 +95,15 @@
                         </dl>
                     </div>
                 @else
-                    <p class="mt-5 text-sm leading-relaxed text-stone-600">Prepara tu recorrido para revisar aquí las estaciones y condiciones seleccionadas.</p>
+                    <p class="mt-5 text-sm leading-relaxed text-stone-600">Calcula una ruta para revisar las estaciones y condiciones seleccionadas.</p>
                 @endif
-                <p id="selection-changed" hidden role="status" class="mt-5 text-sm text-amber-800">Cambiaste las condiciones. Prepara el recorrido otra vez para validar la nueva selección.</p>
-                <div class="mt-6 border-t border-stone-100 pt-5">
-                    <button type="button" disabled aria-describedby="calculation-status" class="w-full cursor-not-allowed rounded-xl bg-stone-100 px-4 py-3 text-sm font-semibold text-stone-500">Calcular ruta</button>
-                    <p id="calculation-status" class="mt-3 text-xs leading-relaxed text-stone-500">Cálculo pendiente de integración. Todavía no hay tiempo total ni ruta recomendada.</p>
-                </div>
+                <p id="selection-changed" hidden role="status" class="mt-5 text-sm text-amber-800">Cambiaste las condiciones. Calcula la ruta otra vez para actualizar los resultados.</p>
+                <p class="mt-6 border-t border-stone-100 pt-5 text-xs leading-relaxed text-stone-500">Hora pico y congestión se calculan según la salida. Los cambios de línea se cuentan como transbordos, sin penalización de tiempo adicional.</p>
             </aside>
         </div>
+        @if ($routeResults)
+            @include('partials.route-results', ['routeResults' => $routeResults])
+        @endif
         <footer class="mt-8 flex flex-wrap justify-between gap-3 border-t border-stone-200 pt-6 text-xs text-stone-500"><p>MetroRoute Medellín · Jose &amp; Anderson</p><p>Proyecto académico. No es un servicio oficial del Metro.</p></footer>
     </main>
 </body>
