@@ -8,7 +8,7 @@ Los tiempos y penalizaciones serán datos simulados para fines académicos. La a
 
 Primera entrega de Jose: base de Laravel, SQLite, zona horaria `America/Bogota`, idioma español y bienvenida en `/` (ruta `home`). La comprobación de salud de Laravel está en `/up`.
 
-Ya existe el catálogo de 21 estaciones representativas. Las conexiones del grafo, el calculador, los pesos dinámicos y Dijkstra todavía no están implementados.
+Ya existe el catálogo de 21 estaciones y 20 tramos simplificados (40 conexiones dirigidas). El calculador, la aplicación de pesos dinámicos y Dijkstra todavía no están implementados.
 
 ## Instalación local
 
@@ -48,7 +48,7 @@ La página inicial debe mostrar MetroRoute Medellín y el aviso de proyecto en d
 
 `StationSeeder` busca por código y actualiza el nombre sin duplicar estaciones ni cambiar sus IDs. Conserva estaciones adicionales. Puedes ejecutarlo de nuevo con `php artisan db:seed --class=StationSeeder`. El seeder general ahora carga estaciones y no crea el usuario de ejemplo de Laravel.
 
-Las líneas y los transbordos se definirán al implementar conexiones: una estación compartida, como San Antonio, conserva un único registro. Todavía no hay relaciones hacia conexiones ni cálculo de rutas.
+Las líneas y los transbordos se definirán al implementar conexiones: una estación compartida, como San Antonio, conserva un único registro. Cada estación expone `outgoingConnections()` e `incomingConnections()`. Todavía no hay cálculo de rutas.
 
 Para revisar la tabla y ejecutar sus pruebas:
 
@@ -58,6 +58,37 @@ php artisan test --compact tests/Feature/StationTest.php tests/Feature/StationSe
 ```
 
 Las pruebas usan SQLite en memoria y no modifican tu base local.
+
+## Conexiones
+
+`Connection` representa una arista dirigida. Sus campos son `origin_station_id`, `destination_station_id`, `line`, `base_time`, `weather_penalty`, `peak_hour_penalty`, `congestion_penalty` y `transfer_penalty`, además del ID y marcas de tiempo. `originStation()` y `destinationStation()` permiten acceder a sus extremos.
+
+Cada tramo bidireccional se guarda como dos registros independientes. La combinación origen, destino y línea es única; se permiten líneas distintas entre los mismos extremos. Las claves foráneas impiden referencias inexistentes y borrar estaciones que tengan conexiones.
+
+Los tiempos se expresan en minutos enteros. Al guardar mediante el modelo se valida tiempo base mayor que cero, penalizaciones no negativas, línea obligatoria y extremos distintos. Estas validaciones se ejecutan en eventos de Eloquent: las escrituras masivas con query builder o SQL directo las omiten; usa `create`, `save`, `update` sobre una instancia o `updateOrCreate`. Las restricciones de unicidad y claves foráneas sí pertenecen a SQLite.
+
+El seeder carga 14 tramos de la línea A y 6 de la B, todos en ambos sentidos. Conecta las estaciones seleccionadas consecutivamente: algunos tramos agrupan estaciones omitidas. **Es una red simplificada, no un mapa completo de conexiones reales.** Todos sus costos son simulados:
+
+| Campo | Línea A | Línea B |
+| --- | --- | --- |
+| Tiempo base | 4 | 3 |
+| Penalización por lluvia | 1 | 1 |
+| Penalización por hora pico | 2 | 2 |
+| Penalización por congestión | 1 | 1 |
+| Penalización por transbordo | 0 | 0 |
+
+Estos valores son parámetros para el futuro `RouteCostService`, no penalizaciones que se sumen siempre. La detección de hora pico y congestión sigue a cargo de Anderson. El transbordo por cambio de línea requiere conocer la línea anterior; aún no se calcula y no debe cobrarse en cada tramo de una línea. El campo `transfer_penalty` queda disponible para conexiones que explícitamente representen un transbordo.
+
+La topología inicial es un árbol bidireccional: cambiar sus pesos altera el tiempo, pero no genera otro camino simple. Para la demostración académica de rutas alternativas habrá que acordar y añadir conexiones adicionales claramente identificadas como simuladas.
+
+```sh
+php artisan migrate
+php artisan db:seed
+php artisan db:table connections
+php artisan test --compact tests/Feature/ConnectionTest.php tests/Feature/ConnectionSeederTest.php
+```
+
+El seeder general carga estaciones antes de conexiones. `ConnectionSeeder` falla con un mensaje claro si faltan estaciones. Puede repetirse sin duplicar conexiones ni cambiar IDs; restablece los costos del catálogo y conserva conexiones ajenas a él. Para conservar cambios manuales en costos, no repitas el seeder sobre esos datos.
 
 ## Trabajo colaborativo
 
@@ -79,7 +110,7 @@ Cada integrante trabaja en su propia rama, con commits pequeños por funcionalid
 
 Dijkstra consumirá el servicio de costos de Jose. La detección de hora pico y congestión pertenece a Anderson; Jose integrará sus penalizaciones sin duplicar esa lógica.
 
-Siguiente funcionalidad de Jose: modelo y migración de conexiones con sus relaciones a estaciones, en `dev/jose`.
+Siguiente funcionalidad de Jose: `RouteCostService` para aplicar los pesos dinámicos y el clima, en `dev/jose`.
 
 ## Herramientas de desarrollo
 
