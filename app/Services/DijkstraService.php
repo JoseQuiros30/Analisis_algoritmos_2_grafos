@@ -12,19 +12,33 @@ class DijkstraService
      * cuando este disponible. Incluir todos los nodos, incluso los aislados.
      * Para conexiones bidireccionales se deben incluir ambos sentidos.
      * Las conexiones cerradas deben omitirse antes de llamar al servicio.
-     * Seleccion lineal del menor: O(V^2 + E) tiempo y O(V) espacio auxiliar.
+     * Seleccion lineal del menor: O(V^2 + E) tiempo. Espacio auxiliar O(V)
+     * sin historial y O(V^2 + E) con capturas de cada iteracion.
      * Las distancias inalcanzables se devuelven como null para permitir JSON.
+     * Cada paso representa el estado DESPUES de evaluar todos los vecinos.
+     * Se procesan todos los nodos alcanzables, incluso despues del destino.
      *
      * @param  array<int|string, array<int|string, int|float>>  $graph
-     * @return array{path: list<int|string>, totalCost: float|null, distances: array<int|string, float|null>, predecessors: array<int|string, int|string|null>, visited: list<int|string>}
+     * @return array{
+     *     path: list<int|string>, totalCost: float|null,
+     *     distances: array<int|string, float|null>,
+     *     predecessors: array<int|string, int|string|null>, visited: list<int|string>,
+     *     steps: list<array{
+     *         iteration: int, currentNode: int|string, currentDistance: float,
+     *         neighbors: list<array{node: int|string, weight: int|float, previousDistance: float|null, candidateDistance: float|null, newDistance: float|null, status: 'relaxed'|'unchanged'|'visited'}>,
+     *         distances: array<int|string, float|null>,
+     *         predecessors: array<int|string, int|string|null>, visited: list<int|string>
+     *     }>
+     * }
      */
-    public function findShortestPath(array $graph, int|string $origin, int|string $destination): array
+    public function findShortestPath(array $graph, int|string $origin, int|string $destination, bool $recordSteps = true): array
     {
         $this->validateGraph($graph, $origin, $destination);
 
         $distances = array_fill_keys(array_keys($graph), INF);
         $predecessors = array_fill_keys(array_keys($graph), null);
         $visited = [];
+        $steps = [];
         $distances[$origin] = 0.0;
 
         while (true) {
@@ -43,9 +57,23 @@ class DijkstraService
             }
 
             $visited[$current] = true;
+            $neighbors = [];
 
             foreach ($graph[$current] as $neighbor => $weight) {
+                $previousDistance = $distances[$neighbor];
+
                 if (isset($visited[$neighbor])) {
+                    if ($recordSteps) {
+                        $neighbors[] = [
+                            'node' => $neighbor,
+                            'weight' => $weight,
+                            'previousDistance' => $previousDistance,
+                            'candidateDistance' => null,
+                            'newDistance' => $previousDistance,
+                            'status' => 'visited',
+                        ];
+                    }
+
                     continue;
                 }
 
@@ -59,6 +87,29 @@ class DijkstraService
                     $distances[$neighbor] = $candidate;
                     $predecessors[$neighbor] = $current;
                 }
+
+                if ($recordSteps) {
+                    $neighbors[] = [
+                        'node' => $neighbor,
+                        'weight' => $weight,
+                        'previousDistance' => is_finite($previousDistance) ? $previousDistance : null,
+                        'candidateDistance' => $candidate,
+                        'newDistance' => $distances[$neighbor],
+                        'status' => $candidate < $previousDistance ? 'relaxed' : 'unchanged',
+                    ];
+                }
+            }
+
+            if ($recordSteps) {
+                $steps[] = [
+                    'iteration' => count($steps) + 1,
+                    'currentNode' => $current,
+                    'currentDistance' => $distances[$current],
+                    'neighbors' => $neighbors,
+                    'distances' => $this->serializableDistances($distances),
+                    'predecessors' => $predecessors,
+                    'visited' => array_keys($visited),
+                ];
             }
         }
 
@@ -72,9 +123,7 @@ class DijkstraService
             $path = array_reverse($path);
         }
 
-        foreach ($distances as $node => $distance) {
-            $distances[$node] = is_finite($distance) ? $distance : null;
-        }
+        $distances = $this->serializableDistances($distances);
 
         return [
             'path' => $path,
@@ -82,7 +131,21 @@ class DijkstraService
             'distances' => $distances,
             'predecessors' => $predecessors,
             'visited' => array_keys($visited),
+            'steps' => $steps,
         ];
+    }
+
+    /**
+     * @param  array<int|string, float>  $distances
+     * @return array<int|string, float|null>
+     */
+    private function serializableDistances(array $distances): array
+    {
+        foreach ($distances as $node => $distance) {
+            $distances[$node] = is_finite($distance) ? $distance : null;
+        }
+
+        return $distances;
     }
 
     /**
