@@ -42,7 +42,7 @@ class RoutePlannerIntegrationTest extends TestCase
         $this->assertSame(3, $result['costs']['total']);
     }
 
-    public function test_counts_line_changes_without_charging_an_unimplemented_transfer_rule(): void
+    public function test_charges_the_entered_connections_penalty_only_on_line_changes(): void
     {
         [$origin, $middle, $destination] = Station::factory()->count(3)->create()->all();
         $this->connect($origin, $middle, ['line' => 'A', 'base_time' => 4, 'weather_penalty' => 1, 'peak_hour_penalty' => 2]);
@@ -54,7 +54,7 @@ class RoutePlannerIntegrationTest extends TestCase
         $this->assertSame([$origin->id, $middle->id, $destination->id], array_column($result['stations'], 'id'));
         $this->assertSame([
             'base_time' => 7, 'weather_penalty' => 3, 'peak_hour_penalty' => 3,
-            'congestion_penalty' => 0, 'transfer_penalty' => 0, 'total' => 13,
+            'congestion_penalty' => 0, 'transfer_penalty' => 9, 'total' => 22,
         ], $result['costs']);
     }
 
@@ -70,7 +70,9 @@ class RoutePlannerIntegrationTest extends TestCase
         $this->assertFalse($reverse['found']);
         $this->assertNull($reverse['costs']);
         $this->assertSame([], $reverse['legs']);
-        $this->assertSame($reverse, $unreachable);
+        $this->assertFalse($unreachable['found']);
+        $this->assertNull($unreachable['costs']);
+        $this->assertSame([], $unreachable['legs']);
     }
 
     public function test_seeded_network_produces_a_complete_route_and_http_summary(): void
@@ -131,8 +133,8 @@ class RoutePlannerIntegrationTest extends TestCase
         $this->assertSame([$origin->id, $destination->id], array_column($normal['stations'], 'id'));
         $this->assertSame([$first->id, $last->id], array_column($peak['legs'], 'connection_id'));
         $this->assertSame(6, $peak['costs']['total']);
-        $this->assertSame($origin->id, $peak['steps'][0]['currentNode']);
-        $this->assertSame(6.0, $peak['steps'][array_key_last($peak['steps'])]['distances'][$destination->id]);
+        $this->assertSame($origin->name.' · inicio', $peak['node_labels'][$peak['steps'][0]['currentNode']]);
+        $this->assertSame(6.0, $peak['steps'][array_key_last($peak['steps'])]['distances']['destination']);
     }
 
     public function test_selected_trip_uses_direction_and_parallel_edge_identity(): void
@@ -151,7 +153,7 @@ class RoutePlannerIntegrationTest extends TestCase
         $this->assertFalse($reverse['found']);
         $this->assertNull($reverse['costs']);
         $this->assertSame([], $reverse['stations']);
-        $this->assertSame($destination->id, $reverse['steps'][0]['currentNode']);
+        $this->assertSame($destination->name.' · inicio', $reverse['node_labels'][$reverse['steps'][0]['currentNode']]);
     }
 
     public function test_http_result_outside_peak_uses_low_congestion_and_escapes_route_names(): void

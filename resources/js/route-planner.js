@@ -9,6 +9,7 @@ if (form) {
     const changed = document.querySelector('#selection-changed');
 
     function invalidateSummary() {
+        document.dispatchEvent(new CustomEvent('metro:selection-changed'));
         if (results) {
             results.hidden = true;
         }
