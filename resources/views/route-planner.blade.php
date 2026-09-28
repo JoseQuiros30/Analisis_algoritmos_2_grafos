@@ -60,6 +60,29 @@
                         </div>
                         @error('weather')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
                     </fieldset>
+                    <div>
+                        <label for="transfer_minutes" class="mb-2 block text-sm font-semibold">Minutos por cambio de línea</label>
+                        <input id="transfer_minutes" name="transfer_minutes" type="number" min="0" max="60" step="1" required value="{{ $form['transfer_minutes'] }}" class="planner-input" aria-describedby="transfer-help">
+                        <p id="transfer-help" class="mt-2 text-xs text-stone-500">Tiempo simulado. No se cobra al abordar la primera línea. Usa 0 para comparar sin penalización.</p>
+                        @error('transfer_minutes')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
+                    </div>
+                    @if ($demoAvailable)
+                        <div class="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">
+                            <label class="flex items-start gap-2 font-semibold"><input type="checkbox" name="demo_routes" value="1" @checked($form['demo_routes'] === '1') class="mt-1 accent-violet-700"> Activar rutas alternativas de demostración</label>
+                            <p class="mt-2 text-xs leading-relaxed">Añade una conexión ficticia Universidad ↔ San Antonio. Prueba ese trayecto a las 10:00: Normal usa el atajo (10 min); Lluvia usa la línea A (20 min). No representa un servicio real.</p>
+                        </div>
+                    @endif
+                    <details class="rounded-xl border border-red-200 p-4" @if(count($form['closed_connections'])) open @endif>
+                        <summary class="cursor-pointer text-sm font-semibold">Simular incidentes / cierres</summary>
+                        <p id="closures-help" class="mt-2 text-xs text-stone-600">Marca los sentidos que deseas cerrar. Para cerrar ambos sentidos, marca ambas direcciones. Solo afecta este cálculo, no modifica el catálogo. Desmarca y calcula de nuevo para reabrir.</p>
+                        <div class="mt-3 max-h-64 space-y-3 overflow-y-auto" role="group" aria-describedby="closures-help" aria-label="Conexiones cerradas">
+                            @forelse ($closureOptions as $option)
+                                <label class="flex items-start gap-2 text-xs"><input type="checkbox" name="closed_connections[]" value="{{ $option['id'] }}" @checked(in_array((string) $option['id'], $form['closed_connections'], true)) class="mt-0.5 accent-red-700">{{ $option['label'] }}</label>
+                            @empty
+                                <p class="text-xs text-stone-500">No hay conexiones en el catálogo.</p>
+                            @endforelse
+                        </div>
+                    </details>
                     <button type="submit" @disabled($stations->count() < 2) class="w-full rounded-xl bg-emerald-900 px-4 py-3.5 font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Calcular ruta <span aria-hidden="true">→</span></button>
                     <p class="text-xs leading-relaxed text-stone-500">Calcula la ruta de menor costo para las condiciones seleccionadas y compara los cuatro escenarios.</p>
                 </form>
@@ -82,7 +105,7 @@
                     <p class="mt-5 text-sm leading-relaxed text-stone-600">Calcula una ruta para revisar las estaciones y condiciones seleccionadas.</p>
                 @endif
                 <p id="selection-changed" hidden role="status" class="mt-5 text-sm text-amber-800">Cambiaste las condiciones. Calcula la ruta otra vez para actualizar los resultados.</p>
-                <p class="mt-6 border-t border-stone-100 pt-5 text-xs leading-relaxed text-stone-500">Hora pico y congestión se calculan según la salida. Los cambios de línea se cuentan como transbordos, sin penalización de tiempo adicional.</p>
+                <p class="mt-6 border-t border-stone-100 pt-5 text-xs leading-relaxed text-stone-500">Hora pico y congestión se calculan según la salida. El tiempo por cambio de línea participa en la búsqueda de la ruta de menor costo.</p>
             </aside>
         </div>
         @if ($routeResults)

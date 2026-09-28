@@ -51,3 +51,38 @@ test('details include congestion so the displayed breakdown matches the trip tot
     }};
     assert.equal(formatLegDetails(leg), 'Universidad → Hospital · Línea A · 9 min = 4 base + 1 lluvia + 2 hora pico + 2 congestión + 0 transbordo.');
 });
+
+
+test('highlights the reverse virtual connection with its own time and demo styling', () => {
+    const demo = [
+        { id: -1, origin_station_id: 1, destination_station_id: 3, line: 'DEMO', base_time: 10 },
+        { id: -2, origin_station_id: 3, destination_station_id: 1, line: 'DEMO', base_time: 10 },
+    ];
+    const trip = { found: true, stations: [stations[2], stations[0]], legs: [{ connection_id: -2, costs: { total: 14 } }] };
+    const edges = buildMapElements({ stations, connections: [...connections, ...demo] }, trip).filter((item) => item.group === 'edges');
+    const selected = edges.find((item) => item.data.selectedId === -2);
+    assert.equal(selected.data.source, 's3');
+    assert.equal(selected.data.target, 's1');
+    assert.equal(selected.data.label, '14 min');
+    assert.match(selected.classes, /demo-edge/);
+    assert.match(selected.classes, /on-route/);
+    assert.deepEqual(routeTimeline(trip).map((stop) => stop.elapsed), [0, 14]);
+});
+
+test('draws a closed direction separately from the usable reverse direction', () => {
+    const data = { stations, connections: [
+        { ...connections[0], closed: true },
+        { ...connections[1], closed: false },
+    ] };
+    const edges = buildMapElements(data, route).filter((item) => item.group === 'edges');
+    assert.equal(edges.length, 2);
+    const closed = edges.find((item) => item.classes.includes('closed-edge'));
+    const open = edges.find((item) => item.classes.includes('on-route'));
+    assert.equal(closed.data.source, 's1');
+    assert.equal(closed.data.target, 's2');
+    assert.equal(closed.data.arrow, 'triangle');
+    assert.equal(closed.data.label, 'Cerrado');
+    assert.equal(closed.data.selectedId, null);
+    assert.equal(open.data.selectedId, 11);
+    assert.equal(open.data.label, '9 min');
+});

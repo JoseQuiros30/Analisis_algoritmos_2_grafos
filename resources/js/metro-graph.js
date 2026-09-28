@@ -35,6 +35,9 @@ if (container && payload) {
             { selector: 'edge', style: { width: 5, 'line-color': 'data(color)', 'curve-style': 'straight', 'target-arrow-shape': 'data(arrow)', 'target-arrow-color': 'data(color)', 'arrow-scale': 0.65,
                 label: 'data(label)', 'font-size': 13, color: '#334155', 'text-background-opacity': 1, 'text-background-color': '#fff', 'text-background-padding': '3px', 'text-margin-x': -30, 'text-wrap': 'wrap' } },
             { selector: 'edge.branch-edge', style: { 'text-margin-x': 0, 'text-margin-y': 25 } },
+            { selector: 'edge.demo-edge', style: { 'curve-style': 'unbundled-bezier', 'control-point-distances': -150, 'control-point-weights': 0.5, 'line-style': 'dashed' } },
+            { selector: 'edge.directed-edge', style: { 'curve-style': 'unbundled-bezier', 'control-point-distances': 35, 'control-point-weights': 0.5 } },
+            { selector: 'edge.closed-edge', style: { 'line-style': 'dashed', 'line-color': '#dc2626', 'target-arrow-color': '#dc2626', color: '#b91c1c', opacity: 1 } },
             { selector: '.dimmed', style: { opacity: 0.4, 'text-opacity': 0.85 } },
             { selector: 'edge.on-route', style: { width: 8, 'z-index': 5 } },
             { selector: 'node.on-route', style: { 'font-weight': 700, 'z-index': 10 } },
@@ -47,7 +50,7 @@ if (container && payload) {
     document.querySelector('.map-tools').hidden = !data.stations.length;
     document.querySelector('#map-empty').hidden = !!data.stations.length;
     if (route?.found) {
-        cy.elements().not('.on-route').addClass('dimmed');
+        cy.elements().not('.on-route, .closed-edge').addClass('dimmed');
         playback.hidden = false;
         slider.max = timeline.length - 1;
         document.querySelector('#map-trip-total').textContent = `${route.costs.total} min · ${timeline.length} estaciones · ${route.transfer_count} ${route.transfer_count === 1 ? 'transbordo' : 'transbordos'}`;
@@ -106,7 +109,7 @@ if (container && payload) {
             detail.textContent = formatLegDetails(leg);
         } else {
             const names = new Map(data.stations.map((station) => [Number(station.id), station.name]));
-            detail.textContent = edge.data('connections').map((connection) => `${names.get(Number(connection.origin_station_id))} → ${names.get(Number(connection.destination_station_id))}: ${connection.base_time} min base (línea ${connection.line})`).join(' / ');
+            detail.textContent = edge.data('connections').map((connection) => `${names.get(Number(connection.origin_station_id))} → ${names.get(Number(connection.destination_station_id))}: ${connection.closed ? 'CERRADO · ' : ''}${connection.base_time} min base (línea ${connection.line})`).join(' / ');
         }
     });
     document.addEventListener('metro:selection-changed', () => {
@@ -116,7 +119,7 @@ if (container && payload) {
         cy.batch(() => {
             cy.elements().removeClass('dimmed on-route current travelled origin destination');
             cy.nodes().forEach((node) => node.data('label', node.data('name')));
-            cy.edges().forEach((edge) => { edge.data('label', ''); edge.data('arrow', edge.data('connections').length > 1 ? 'none' : 'triangle'); });
+            cy.edges().forEach((edge) => { edge.data('label', edge.hasClass('closed-edge') ? 'Cerrado (cálculo anterior)' : ''); edge.data('arrow', edge.data('connections').length > 1 ? 'none' : 'triangle'); });
         });
         status.textContent = 'Cambiaste las condiciones. Calcula de nuevo para actualizar el mapa y los tiempos.';
         detail.textContent = 'El recorrido anterior se ha retirado del mapa.';

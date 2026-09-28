@@ -7,6 +7,16 @@
         <span><i class="line-dot line-a" aria-hidden="true"></i>A · Niquía — Itagüí</span>
         <span><i class="line-dot line-b" aria-hidden="true"></i>B · San Antonio — San Javier</span>
     </div>
+    @if ($demoEnabled)
+        <p class="px-6 pb-4 text-sm text-violet-800">DEMO · Conexión ficticia violeta discontinua: Universidad ↔ San Antonio. Base 10 min + 15 min si llueve; también aplica tráfico automático.</p>
+    @endif
+    @if ($activeClosures->isNotEmpty())
+        <details class="px-6 pb-4 text-sm text-red-800" open>
+            <summary class="cursor-pointer font-semibold">Cierres simulados aplicados ({{ $activeClosures->count() }}) · rojo discontinuo</summary>
+            <ul class="mt-2 list-inside list-disc">@foreach ($activeClosures as $closure)<li>{{ $closure['label'] }}</li>@endforeach</ul>
+            <p class="mt-2 text-xs">La flecha indica el sentido cerrado. Los cinco escenarios excluyen estas conexiones.</p>
+        </details>
+    @endif
     <div class="metro-map-stage">
         <div class="map-river" aria-hidden="true"><span>Río Medellín</span></div>
         <div id="metro-map" role="img" aria-label="Mapa esquemático de estaciones y conexiones. El recorrido también se presenta como lista debajo del mapa."></div>

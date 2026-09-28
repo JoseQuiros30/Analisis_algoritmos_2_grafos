@@ -50,7 +50,7 @@ La página inicial muestra MetroRoute Medellín y el enlace «Abrir el planifica
 
 `StationSeeder` busca por código y actualiza el nombre sin duplicar estaciones ni cambiar sus IDs. Conserva estaciones adicionales. Puedes ejecutarlo de nuevo con `php artisan db:seed --class=StationSeeder`. El seeder general ahora carga estaciones y no crea el usuario de ejemplo de Laravel.
 
-Las líneas y los transbordos se definirán al implementar conexiones: una estación compartida, como San Antonio, conserva un único registro. Cada estación expone `outgoingConnections()` e `incomingConnections()`. El planificador ya utiliza estas conexiones para calcular rutas.
+Las líneas se definen en las conexiones y los transbordos dependen de la línea de llegada: una estación compartida, como San Antonio, conserva un único registro. Cada estación expone `outgoingConnections()` e `incomingConnections()`. El planificador ya utiliza estas conexiones para calcular rutas.
 
 Para revisar la tabla y ejecutar sus pruebas:
 
@@ -79,9 +79,9 @@ El seeder carga 14 tramos de la línea A y 6 de la B, todos en ambos sentidos. C
 | Penalización por congestión | 1 | 1 |
 | Penalización por transbordo | 0 | 0 |
 
-Estos valores son parámetros de `RouteCostService`, no penalizaciones que se sumen siempre. La detección de hora pico y congestión sigue a cargo de Anderson. El transbordo por cambio de línea requiere conocer la línea anterior; aún no se calcula y no debe cobrarse en cada tramo de una línea. El campo `transfer_penalty` queda disponible para conexiones que explícitamente representen un transbordo.
+Estos valores se aplican según las condiciones. Hora pico y congestión se detectan automáticamente. El planificador cobra transbordo solo al cambiar de línea: el formulario propone 3 minutos simulados (ajustables de 0 a 60), sin modificar los registros. Si el servicio se invoca sin ese parámetro, usa `transfer_penalty` de la conexión de la nueva línea.
 
-La topología inicial es un árbol bidireccional: cambiar sus pesos altera el tiempo, pero no genera otro camino simple. Para la demostración académica de rutas alternativas habrá que acordar y añadir conexiones adicionales claramente identificadas como simuladas.
+La topología inicial es un árbol bidireccional: cambiar sus pesos altera el tiempo, pero no genera otro camino simple. El modo demostrativo opcional añade Universidad ↔ San Antonio, una conexión ficticia de 10 minutos base y 15 adicionales por lluvia, sin escribir en la base de datos. Se muestra violeta y discontinua. A las 10:00, ese trayecto tarda 10 minutos en Normal por DEMO y 20 en Lluvia por A.
 
 ```sh
 php artisan migrate
@@ -119,7 +119,7 @@ El resultado siempre contiene `base_time`, `weather_penalty`, `peak_hour_penalty
 - Clima: `normal` no suma penalización; `rain` suma `weather_penalty` de la conexión. Es una selección de simulación, sin API meteorológica.
 - Hora pico: `isPeakHour` activa `peak_hour_penalty`. La detección a partir de una hora corresponde a Anderson.
 - Congestión: `isCongested` activa `congestion_penalty`. La clasificación de niveles corresponde a Anderson; este contrato inicial solo recibe si la penalización está activa.
-- Transbordo: `isTransfer` activa `transfer_penalty` de la conexión. No detecta cambios de línea ni agrega una tarifa global; el catálogo actual tiene esta penalización en cero. Al integrar costos dependientes de la línea anterior, Dijkstra deberá representar ese estado o utilizar aristas explícitas de transbordo para mantener la corrección.
+- Transbordo: `isTransfer` activa `transfer_penalty` de la conexión. No detecta cambios de línea ni agrega una tarifa global; el catálogo actual tiene esta penalización en cero. El planificador representa estados estación/línea para integrar estos costos antes de optimizar, con una penalización configurable desde el formulario.
 
 Ejemplos para una conexión con tiempo base 4, lluvia 1, hora pico 2 y congestión 1, sin transbordo:
 
@@ -133,7 +133,7 @@ Ejemplos para una conexión con tiempo base 4, lluvia 1, hora pico 2 y congesti�
 
 El servicio rechaza climas desconocidos y costos inválidos con `InvalidArgumentException`, incluso si una penalización inválida está inactiva. Revisa los valores sin convertirlos primero a los casts de Eloquent para no ocultar fracciones o datos corruptos. Exige tiempo base positivo y penalizaciones no negativas; también rechaza desbordamiento del total. Una capa HTTP futura deberá validar los controles y convertirlos a los tipos de este contrato.
 
-No se decide la ruta óptima ni se ignoran incidentes aquí. Anderson gestionará conexiones bloqueadas en la construcción del grafo o en Dijkstra. Los escenarios de la tabla están cubiertos por pruebas del servicio. La comparación visual por conexión está disponible en `/escenarios`; la comparación de rutas completas está disponible en `/planificador`.
+No se decide la ruta óptima ni se ignoran incidentes aquí. El planificador omite las conexiones seleccionadas como cerradas antes de construir el grafo. Los escenarios de la tabla están cubiertos por pruebas del servicio. La comparación visual por conexión está disponible en `/escenarios`; la comparación de rutas completas está disponible en `/planificador`.
 
 ```sh
 php artisan test --compact tests/Feature/RouteCostServiceTest.php
@@ -182,7 +182,7 @@ Los calculos no modifican ni guardan la conexion.
 Para Dijkstra, usar la misma hora de salida en todas las aristas de una ejecucion:
 los pesos se calculan antes de recorrer el grafo, no al llegar a cada estacion.
 Una prueba con un grafo alternativo simulado verifica que la ruta cambia al aumentar
-los costos. El catalogo actual sigue siendo un arbol y no ofrece rutas alternativas.
+los costos. El catálogo base sigue siendo un árbol; el modo DEMO añade una alternativa virtual opcional.
 La conexion con el formulario y el grafo real ya utiliza estos servicios; el
 resultado seleccionado incorpora hora pico y congestion automaticas.
 
@@ -200,11 +200,11 @@ Desde la bienvenida, abre **Abrir el planificador** (`GET /planificador`, ruta `
 
 `RoutePlannerService::compare(int $origin, int $destination)` carga estaciones y conexiones una vez, y reutiliza esa red para los cuatro escenarios definidos por `ScenarioComparisonService`. Para cada uno:
 
-El formulario pasa además `departureTime` y `weather`: `compare($origin, $destination, '07:30', 'rain')`. Esto añade la entrada `trip` con la ruta seleccionada y sus `conditions`, calculada mediante `TrafficCostService` sobre la misma red. Se devuelve su historial en `steps` para el futuro panel académico. Los cuatro escenarios de referencia siguen sin congestión para aislar clima y hora pico; la tabla distingue la quinta fila de tráfico automático.
+El formulario pasa además `departureTime` y `weather`: `compare($origin, $destination, '07:30', 'rain')`. Esto añade la entrada `trip` con la ruta seleccionada y sus `conditions`, calculada mediante `TrafficCostService` sobre la misma red. El panel académico muestra su historial `steps` y traduce los estados mediante `node_labels`. Los cuatro escenarios de referencia siguen sin congestión para aislar clima y hora pico; la tabla distingue la quinta fila de tráfico automático.
 
 1. Calcula los pesos finales con `RouteCostService`.
-2. Construye una lista de adyacencia dirigida, incluyendo estaciones aisladas.
-3. Si varias conexiones unen el mismo origen y destino, conserva la de menor costo; en empate, el menor ID. Guarda su identidad para reconstruir la línea y desglose correctos.
+2. Construye una lista dirigida de estados estación/línea de llegada, un estado inicial sin línea y un destino terminal de costo cero. Un destino aislado permanece inalcanzable.
+3. Conserva distintas líneas de llegada como estados independientes. Dentro del mismo par de estados conserva la conexión de menor costo y su identidad.
 4. Invoca `DijkstraService::findShortestPath(...)` de Anderson sin reemplazar su algoritmo: registra pasos para `trip` y los desactiva para los cuatro escenarios de referencia.
 5. Reconstruye las estaciones, conexiones elegidas y sumas de cada componente. Cuenta cambios consecutivos de línea como transbordos; no cuenta el abordaje inicial.
 
@@ -212,20 +212,26 @@ Cada escenario devuelve `found`, `stations` (ID y nombre), `legs` (ID de conexi�
 
 El resultado seleccionado muestra tiempo total, número de estaciones incluidos ambos extremos, transbordos, desglose y timeline. La tabla inferior ejecuta Dijkstra de nuevo por escenario; no se limita a sumar penalizaciones al camino que ganó en Normal.
 
+### Incidentes y cierres simulados
+
+En **Simular incidentes / cierres**, marca las conexiones del catálogo que deseas excluir y vuelve a calcular. Cada opción cierra solo el sentido indicado; para bloquear un tramo completo, marca ambos sentidos. Desmarca y calcula para reabrir. El cierre afecta los cinco escenarios y el historial académico, sin modificar registros ni afectar a otros usuarios. El mapa lo representa en rojo discontinuo; separa las direcciones cuando solo una está cerrada. La conexión virtual DEMO no aparece entre los cierres del catálogo.
+
+Prueba: Universidad → San Antonio, 10:00, Lluvia. Cierra Universidad → Hospital (A). Sin DEMO no hay ruta; con DEMO se usa la conexión ficticia de 25 minutos. Reabre y calcula: la línea A vuelve a ganar con 20 minutos. Los cierres son una simulación por consulta, no un sistema persistente de reportes de incidentes.
+
 ### Límites actuales
 
 - La hora de salida se mantiene fija para todas las aristas; no se simula la evolución del tráfico durante el viaje. El formulario utiliza congestión automática, aunque el servicio admite niveles explícitos.
-- El costo contextual de transbordo está desactivado. El conteo de cambios de línea es informativo y no participa como criterio de desempate.
-- La minimización de conexiones paralelas es correcta para los pesos actuales, independientes de la línea anterior. Cuando se cobre por cambiar de línea, será necesario representar estados estación/línea o conexiones explícitas de transbordo; no basta con añadir la penalización después de Dijkstra.
-- El mapa esquemático está integrado junto con el tráfico automático. El panel académico e incidentes siguen pendientes de Anderson. Se conserva el historial solo de `trip` en sesión, no el de los cuatro escenarios de referencia; esta estrategia está pensada para el catálogo académico pequeño.
-- El catálogo actual tiene un único camino simple por par. Las pruebas usan una red pequeña de ejemplo con alternativas y demuestran que la lluvia cambia la ruta; aún falta acordar alternativas simuladas para la demostración en pantalla.
+- El transbordo añade minutos solo al cambiar de línea, no al primer abordaje. No es una tarifa oficial.
+- Dijkstra mantiene su implementación manual O(V² + E), con V y E referidos al grafo de estados ampliado.
+- Mapa, tráfico automático y panel académico están integrados. Se conserva el historial solo de `trip` en sesión; está pensado para este catálogo pequeño. Los cierres simulados por sentido se aplican a todos los escenarios.
+- El catálogo base tiene un único camino simple por par. Activa DEMO para observar un cambio de ruta por lluvia.
 
 ### Prueba manual
 
 1. Ejecuta `npm run build` y `php artisan serve`; abre el planificador.
-2. Con el catálogo simulado original, selecciona Niquía → San Javier, 07:30 y Lluvia. Pulsa **Calcular ruta**.
-3. Debes ver **111 minutos**, **14 estaciones** y **1 transbordo**: base 46 + lluvia 13 + hora pico 26 + congestión 26. Las cuatro referencias siguen mostrando 46, 59, 72 y 85 minutos; la quinta fila muestra tu selección de 111 minutos.
-4. Cambia la hora a 09:00 y calcula nuevamente: Lluvia debe dar 59 minutos, sin hora pico ni congestión. Los valores cambian si modificaste los costos del catálogo.
+2. Desactiva DEMO, selecciona Niquía → San Javier, 07:30, Lluvia y 3 minutos por transbordo. Pulsa **Calcular ruta**.
+3. Debes ver **114 minutos**, **14 estaciones** y **1 transbordo**: base 46 + lluvia 13 + hora pico 26 + congestión 26 + transbordo 3. Las cuatro referencias muestran 49, 62, 75 y 88 minutos. Abre las iteraciones de **Dijkstra paso a paso** para revisar distancias, predecesores y relajaciones.
+4. Cambia la hora a 09:00 y calcula nuevamente: Lluvia debe dar 62 minutos, sin hora pico ni congestión. Los valores cambian si modificaste los costos del catálogo.
 5. Selecciona origen y destino iguales para comprobar el error. Revisa el formulario con teclado y en una ventana estrecha; sin JavaScript, el envío sigue funcionando.
 
 ```sh
@@ -288,14 +294,13 @@ php artisan test --compact tests/Feature/ScenarioComparisonTest.php tests/Featur
 npm run build
 ```
 
-## Entregas pendientes de Jose
+## Documentación de entrega y pendientes
 
-Con resultados y comparación de rutas completas implementados quedan **2 bloques de cierre**:
+- [Informe académico](INFORME_ACADEMICO.md): problema, arquitectura, modelo del grafo, costos, Dijkstra, complejidad, pruebas y capturas reales.
+- [Guía de exposición](GUIA_EXPOSICION.md): guion de 8–10 minutos, demostraciones reproducibles y preguntas de sustentación.
+- [Revisión de requisitos](REVISION_REQUISITOS.md): contraste con la consigna original, diferencias de alcance y acciones de cierre.
 
-1. **Integración y pruebas finales:** acordar transbordos y conexiones alternativas simuladas. Verificar el modo académico cuando esté disponible. El mapa, la hora pico automática y la congestión ya están conectados al planificador.
-2. **Documentación académica final y demostración:** consolidar la arquitectura definitiva, limitaciones resueltas, ejemplos y guía de exposición. El README describe la implementación actual y los pendientes explícitos.
-
-Dijkstra, su registro, hora pico automática, congestión y mapa animado están integrados. Panel académico, penalización contextual por transbordo e incidentes siguen pendientes.
+La documentación está preparada sobre el estado local. Dijkstra, panel académico, tráfico, mapa, transbordos, DEMO y cierres simulados están integrados. Quedan la aceptación visual completa, el ensayo de la exposición y guardar/publicar los cambios en commits por funcionalidad mediante PR a `main`. Consultar la matriz para las diferencias entre controles dedicados y las opciones actualmente implementadas.
 
 ## Trabajo colaborativo
 

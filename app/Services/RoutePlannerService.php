@@ -14,19 +14,30 @@ class RoutePlannerService
         private DijkstraService $dijkstraService,
         private TrafficCostService $trafficCosts,
         private TrafficConditionService $trafficConditions,
+        private DemoNetworkService $demoNetwork,
     ) {}
 
     /**
      * Use the same network snapshot for the four reference scenarios and,
      * when a departure time is provided, the actual trip with automatic traffic.
-     * Reference scenarios exclude congestion. Transfer penalties remain disabled.
+     * Reference scenarios exclude congestion. Transfers are evaluated before optimization.
      *
+     * @param  list<int>  $closedConnectionIds
      * @return array<string, array<string, mixed>>
      */
-    public function compare(int $origin, int $destination, ?string $departureTime = null, string $weather = RouteCostService::WEATHER_NORMAL): array
+    public function compare(int $origin, int $destination, ?string $departureTime = null, string $weather = RouteCostService::WEATHER_NORMAL, bool $demoRoutes = false, ?int $transferMinutes = null, array $closedConnectionIds = []): array
     {
-        $stations = Station::orderBy('id')->get(['id', 'name'])->keyBy('id');
+        if ($transferMinutes !== null && ($transferMinutes < 0 || $transferMinutes > 60)) {
+            throw new InvalidArgumentException('El transbordo debe estar entre 0 y 60 minutos.');
+        }
+
+        $stations = Station::orderBy('id')->get(['id', 'code', 'name'])->keyBy('id');
         $connections = Connection::orderBy('id')->get();
+        if ($demoRoutes) {
+            $connections = $connections->concat($this->demoNetwork->connections($stations));
+        }
+
+        $connections = $connections->reject(fn (Connection $connection): bool => in_array($connection->id, $closedConnectionIds, true))->values();
 
         if (! $stations->has($origin) || ! $stations->has($destination)) {
             throw new InvalidArgumentException('El origen y el destino deben existir.');
@@ -36,7 +47,7 @@ class RoutePlannerService
         foreach (ScenarioComparisonService::presets() as $key => $preset) {
             $results[$key] = [
                 ...$preset,
-                ...$this->calculate($stations, $connections, $origin, $destination, $preset['weather'], $preset['is_peak_hour']),
+                ...$this->calculate($stations, $connections, $origin, $destination, $preset['weather'], $preset['is_peak_hour'], transferMinutes: $transferMinutes),
             ];
         }
 
@@ -45,7 +56,7 @@ class RoutePlannerService
                 'label' => 'Tu selección (tráfico automático)',
                 'weather' => $weather,
                 'conditions' => $this->trafficConditions->evaluate($departureTime),
-                ...$this->calculate($stations, $connections, $origin, $destination, $weather, false, $departureTime),
+                ...$this->calculate($stations, $connections, $origin, $destination, $weather, false, $departureTime, $transferMinutes),
             ];
         }
 
@@ -53,42 +64,63 @@ class RoutePlannerService
     }
 
     /**
-     * Dijkstra accepts one weight per neighbor. Keep the cheapest parallel
-     * connection and its identity so reconstruction uses the same edge.
-     * Equal weights retain the lowest connection ID.
+     * Expand each station by arrival line so transfer costs participate in
+     * Dijkstra relaxation. A zero-cost terminal joins all destination states.
+     * Parallel connections within a state retain the cheapest edge.
      *
      * @param  Collection<int, Station>  $stations
      * @param  Collection<int, Connection>  $connections
-     * @return array{found: bool, stations: list<array{id: int, name: string}>, legs: list<array<string, mixed>>, costs: array<string, int>|null, transfer_count: int, steps: list<array<string, mixed>>}
+     * @return array{found: bool, stations: list<array{id: int, name: string}>, legs: list<array<string, mixed>>, costs: array<string, int>|null, transfer_count: int, steps: list<array<string, mixed>>, node_labels: array<string, string>}
      */
-    private function calculate(Collection $stations, Collection $connections, int $origin, int $destination, string $weather, bool $isPeakHour, ?string $departureTime = null): array
+    private function calculate(Collection $stations, Collection $connections, int $origin, int $destination, string $weather, bool $isPeakHour, ?string $departureTime = null, ?int $transferMinutes = null): array
     {
-        $graph = array_fill_keys($stations->modelKeys(), []);
-        $edges = [];
-
+        $start = json_encode([$origin, null], JSON_THROW_ON_ERROR);
+        $terminal = 'destination';
+        $states = [$start => ['station' => $origin, 'line' => null]];
         foreach ($connections as $connection) {
-            $from = $connection->origin_station_id;
-            $to = $connection->destination_station_id;
-            $costs = $departureTime === null
-                ? $this->costService->calculate($connection, $weather, $isPeakHour)
-                : $this->trafficCosts->calculate($connection, $departureTime, $weather)['costs'];
+            $key = json_encode([$connection->destination_station_id, $connection->line], JSON_THROW_ON_ERROR);
+            $states[$key] = ['station' => $connection->destination_station_id, 'line' => $connection->line];
+        }
+        $graph = array_fill_keys(array_keys($states), []);
+        $graph[$terminal] = [];
+        $labels = [$terminal => 'Llegada a '.$stations[$destination]->name];
+        $edges = [];
+        $outgoing = $connections->groupBy('origin_station_id');
 
-            if (! isset($graph[$from][$to]) || $costs['total'] < $graph[$from][$to]) {
-                $graph[$from][$to] = $costs['total'];
-                $edges[$from][$to] = [
-                    'connection_id' => $connection->id,
-                    'origin' => $stations[$from]->name,
-                    'destination' => $stations[$to]->name,
-                    'line' => $connection->line,
-                    'costs' => $costs,
-                ];
+        foreach ($states as $from => $state) {
+            $labels[$from] = $stations[$state['station']]->name.' · '.($state['line'] === null ? 'inicio' : 'línea '.$state['line']);
+            if ($state['station'] === $destination) {
+                $graph[$from][$terminal] = 0;
+            }
+            foreach ($outgoing->get($state['station'], []) as $storedConnection) {
+                $connection = clone $storedConnection;
+                if ($transferMinutes !== null) {
+                    $connection->transfer_penalty = $transferMinutes;
+                }
+                $isTransfer = $state['line'] !== null && $state['line'] !== $connection->line;
+                $to = json_encode([$connection->destination_station_id, $connection->line], JSON_THROW_ON_ERROR);
+                $costs = $departureTime === null
+                    ? $this->costService->calculate($connection, $weather, $isPeakHour, isTransfer: $isTransfer)
+                    : $this->trafficCosts->calculate($connection, $departureTime, $weather, isTransfer: $isTransfer)['costs'];
+
+                if (! isset($graph[$from][$to]) || $costs['total'] < $graph[$from][$to]) {
+                    $graph[$from][$to] = $costs['total'];
+                    $edges[$from][$to] = [
+                        'connection_id' => $connection->id,
+                        'origin' => $stations[$state['station']]->name,
+                        'destination' => $stations[$connection->destination_station_id]->name,
+                        'line' => $connection->line,
+                        'costs' => $costs,
+                    ];
+                }
             }
         }
 
-        $route = $this->dijkstraService->findShortestPath($graph, $origin, $destination, recordSteps: $departureTime !== null);
+        $route = $this->dijkstraService->findShortestPath($graph, $start, $terminal, recordSteps: $departureTime !== null);
         if ($route['totalCost'] === null) {
-            return ['found' => false, 'stations' => [], 'legs' => [], 'costs' => null, 'transfer_count' => 0, 'steps' => $route['steps']];
+            return ['found' => false, 'stations' => [], 'legs' => [], 'costs' => null, 'transfer_count' => 0, 'steps' => $route['steps'], 'node_labels' => $labels];
         }
+        array_pop($route['path']);
 
         $legs = [];
         $totals = array_fill_keys(['base_time', 'weather_penalty', 'peak_hour_penalty', 'congestion_penalty', 'transfer_penalty', 'total'], 0);
@@ -112,11 +144,12 @@ class RoutePlannerService
 
         return [
             'found' => true,
-            'stations' => array_map(fn (int $id): array => ['id' => $id, 'name' => $stations[$id]->name], $route['path']),
+            'stations' => array_map(fn (string $key): array => ['id' => $states[$key]['station'], 'name' => $stations[$states[$key]['station']]->name], $route['path']),
             'legs' => $legs,
             'costs' => $totals,
             'transfer_count' => $transfers,
             'steps' => $route['steps'],
+            'node_labels' => $labels,
         ];
     }
 }

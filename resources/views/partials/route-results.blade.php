@@ -20,11 +20,11 @@
                 <div>
                     <h3 class="font-semibold">Desglose del costo</h3>
                     <dl class="mt-4 space-y-3 text-sm">
-                        @foreach (['base_time' => 'Tiempo base', 'weather_penalty' => 'Lluvia', 'peak_hour_penalty' => 'Hora pico', 'congestion_penalty' => 'Congestión', 'transfer_penalty' => 'Penalización por transbordo (pendiente)'] as $field => $label)
+                        @foreach (['base_time' => 'Tiempo base', 'weather_penalty' => 'Lluvia', 'peak_hour_penalty' => 'Hora pico', 'congestion_penalty' => 'Congestión', 'transfer_penalty' => 'Penalización por transbordo'] as $field => $label)
                             <div class="flex justify-between gap-4 border-b border-stone-100 pb-2"><dt>{{ $label }}</dt><dd class="shrink-0 font-semibold">{{ $selected['costs'][$field] }} min</dd></div>
                         @endforeach
                     </dl>
-                    <p class="mt-4 text-xs leading-relaxed text-stone-500">La hora de salida determina hora pico y congestión para todo el recorrido. Cambiar de línea todavía no añade tiempo.</p>
+                    <p class="mt-4 text-xs leading-relaxed text-stone-500">La hora de salida determina hora pico y congestión para todo el recorrido. Cada cambio de línea añade la penalización configurada; el primer abordaje no cuenta como transbordo.</p>
                 </div>
                 <div>
                     <h3 class="font-semibold">Estación a estación</h3>
@@ -64,6 +64,7 @@
                 </tbody>
             </table>
         </div>
-        <p class="mt-4 text-xs leading-relaxed text-stone-500">El catálogo actual tiene un único camino simple entre cada par conectado: los tiempos pueden cambiar sin que cambien las estaciones. Se necesitan conexiones alternativas para demostrar un cambio de ruta.</p>
+        <p class="mt-4 text-xs leading-relaxed text-stone-500">{{ ($selection['demo_routes'] ?? false) ? 'Modo demostrativo: la conexión DEMO es ficticia. Compara las estaciones de cada escenario para observar cuándo conviene el atajo y cuándo la línea A.' : 'El catálogo base tiene un único camino simple entre cada par conectado. Activa las rutas alternativas de demostración para observar cambios de recorrido.' }}</p>
     </div>
+    @include('partials.dijkstra-steps', ['result' => $selected])
 </section>

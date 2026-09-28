@@ -36,12 +36,12 @@ export function buildMapElements(data, route) {
     for (const connection of data.connections) {
         if (!nodeIds.has(Number(connection.origin_station_id)) || !nodeIds.has(Number(connection.destination_station_id))) continue;
         const pair = [Number(connection.origin_station_id), Number(connection.destination_station_id)].sort((a, b) => a - b);
-        const key = JSON.stringify([...pair, connection.line]);
+        const key = JSON.stringify([...pair, connection.line, Boolean(connection.closed)]);
         if (!grouped.has(key)) grouped.set(key, []);
         grouped.get(key).push(connection);
     }
     const edges = [...grouped.values()].map((connections) => {
-        const selected = connections.find((connection) => routeLegs.has(Number(connection.id)));
+        const selected = connections.find((connection) => !connection.closed && routeLegs.has(Number(connection.id)));
         const connection = selected ?? connections[0];
         const leg = selected ? routeLegs.get(Number(selected.id)) : null;
         const hasReverse = connections.some((candidate) => candidate.origin_station_id === connection.destination_station_id && candidate.destination_station_id === connection.origin_station_id);
@@ -49,9 +49,9 @@ export function buildMapElements(data, route) {
             group: 'edges',
             data: { id: `e${connections[0].id}`, source: `s${connection.origin_station_id}`, target: `s${connection.destination_station_id}`,
                 connections, selectedId: selected?.id ?? null, line: connection.line,
-                color: connection.line === 'A' ? '#1867ae' : connection.line === 'B' ? '#ef790c' : '#64748b',
-                label: leg ? `${leg.costs.total} min` : '', arrow: leg || !hasReverse ? 'triangle' : 'none' },
-            classes: [leg ? 'on-route' : '', connection.line === 'B' ? 'branch-edge' : ''].join(' '),
+                color: connection.closed ? '#dc2626' : connection.line === 'A' ? '#1867ae' : connection.line === 'B' ? '#ef790c' : connection.line === 'DEMO' ? '#7c3aed' : '#64748b',
+                label: connection.closed ? 'Cerrado' : leg ? `${leg.costs.total} min` : '', arrow: leg || !hasReverse ? 'triangle' : 'none' },
+            classes: [leg ? 'on-route' : '', connection.line === 'B' ? 'branch-edge' : '', connection.line === 'DEMO' ? 'demo-edge' : '', connection.closed ? 'closed-edge' : '', !hasReverse ? 'directed-edge' : ''].join(' '),
         };
     });
     return [...nodes, ...edges];
