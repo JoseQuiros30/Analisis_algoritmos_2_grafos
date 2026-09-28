@@ -1,6 +1,7 @@
+#Link video sustentación: https://drive.google.com/file/d/1icqw87-jO80C9UT1HCSl0ew1yGtXFC1N/view?usp=sharing
 # MetroRoute Medellín
 
-Proyecto académico de Jose y Anderson para Análisis de Algoritmos. Estudiaremos rutas entre estaciones del Metro de Medellín mediante grafos, pesos dinámicos y una implementación manual de Dijkstra.
+Proyecto académico donde estudiaremos rutas entre estaciones del Metro de Medellín mediante grafos, pesos dinámicos y una implementación manual de Dijkstra.
 
 Los tiempos y penalizaciones serán datos simulados para fines académicos. La aplicación no representa un servicio oficial del Metro.
 
